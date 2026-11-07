@@ -1,0 +1,19 @@
+{
+  "name": "compteur-zikr",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "bundle": "esbuild src/native.js --bundle --format=iife --minify --outfile=www/native.js",
+    "build": "npm run bundle && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-community/bluetooth-le": "^8.3.0",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/haptics": "^8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
+    "esbuild": "^0.28.2"
+  }
+}

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f1513">
+<title>Compteur Zikr</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{--bg:#0f1513;--card:#18211e;--gold:#d4a84b;--gold2:#f0cf7f;--txt:#eef2ef;--mut:#8fa39b;--ok:#4fbf8a;--err:#e06a5a}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);-webkit-tap-highlight-color:transparent}
+  main{max-width:480px;margin:0 auto;padding:16px 16px 40px}
+  h1{font-size:18px;font-weight:600;margin:4px 0 12px;display:flex;justify-content:space-between;align-items:center}
+  .status{font-size:12px;padding:4px 10px;border-radius:99px;background:#26302c;color:var(--mut)}
+  .status.on{background:#1d3a2c;color:var(--ok)}
+  .card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+  label{font-size:12px;color:var(--mut);display:block;margin-bottom:6px}
+  input{width:100%;background:#0f1513;border:1px solid #2c3833;color:var(--txt);border-radius:10px;padding:10px;font-size:16px}
+  .row{display:flex;gap:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .chip{background:#26302c;border:0;color:var(--txt);padding:7px 12px;border-radius:99px;font-size:14px}
+  .chip.sel{background:var(--gold);color:#1a1405;font-weight:600}
+  button{font:inherit;cursor:pointer}
+  .btn{border:0;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600;background:#26302c;color:var(--txt);flex:1}
+  .btn.gold{background:var(--gold);color:#1a1405}
+  .btn.red{background:#3a2420;color:#f3b3a8}
+  #dial{position:relative;width:260px;height:260px;margin:6px auto 4px;border-radius:50%;border:0;background:none;color:var(--txt);display:block;touch-action:manipulation}
+  #dial svg{position:absolute;inset:0}
+  #dial .in{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  #cur{font-size:72px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+  #tgtLbl{color:var(--mut);font-size:15px;margin-top:6px}
+  #zname{color:var(--gold2);font-size:15px;margin-bottom:6px;max-width:200px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stats{display:flex;justify-content:space-around;text-align:center;margin-top:6px}
+  .stats b{display:block;font-size:30px;font-variant-numeric:tabular-nums}
+  .stats span{font-size:12px;color:var(--mut)}
+  .flash{animation:fl .9s}
+  @keyframes fl{0%{box-shadow:0 0 0 0 rgba(212,168,75,.9)}100%{box-shadow:0 0 0 40px rgba(212,168,75,0)}}
+  .hint{font-size:12px;color:var(--mut);text-align:center;margin:4px 0 10px}
+  details summary{cursor:pointer;color:var(--mut);font-size:14px}
+  #log{font-family:ui-monospace,Menlo,monospace;font-size:11px;white-space:pre-wrap;max-height:220px;overflow:auto;background:#0b100e;border-radius:8px;padding:8px;margin-top:8px;color:#b9c8c1}
+  .small{font-size:12px;color:var(--mut);margin:8px 0}
+  #map{font-size:13px;margin:8px 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Compteur Zikr <span id="status" class="status">Bague non connectée</span></h1>
+
+
+  <div class="card">
+    <button id="dial" aria-label="Ajouter 1">
+      <svg viewBox="0 0 260 260"><circle cx="130" cy="130" r="118" fill="none" stroke="#26302c" stroke-width="12"/>
+        <circle id="arc" cx="130" cy="130" r="118" fill="none" stroke="var(--gold)" stroke-width="12" stroke-linecap="round" transform="rotate(-90 130 130)" stroke-dasharray="741.4" stroke-dashoffset="741.4"/></svg>
+      <div class="in"><div id="zname"></div><div id="cur">0</div><div id="tgtLbl">/ 33</div></div>
+    </button>
+    <div class="hint" id="hint">Appuyez sur la bague (ou touchez le cercle) pour compter</div>
+    <div id="done" style="display:none;text-align:center;color:var(--gold2);font-weight:700;font-size:18px;margin:4px 0 10px">✓ Objectif atteint, qu'Allah l'accepte</div>
+    <div class="stats">
+      <div><b id="rounds">0</b><span>Tours terminés</span></div>
+      <div><b id="left">0</b><span>Zikr restants</span></div>
+      <div><b id="total">0</b><span>Total de la séance</span></div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-bottom:12px">
+    <button class="btn gold" id="connect">Connecter la bague</button>
+    <button class="btn red" id="reset">Remettre à zéro</button>
+  </div>
+
+  <div class="card">
+    <label for="zikr">Zikr (facultatif)</label>
+    <input id="zikr" placeholder="ex. SubhanAllah">
+    <label for="target" style="margin-top:12px">Objectif par tour</label>
+    <input id="target" type="number" min="1" inputmode="numeric" value="33">
+    <div class="chips" id="chips"></div>
+    <label for="goalRounds" style="margin-top:12px">Nombre de tours à faire</label>
+    <input id="goalRounds" type="number" min="1" inputmode="numeric" value="1">
+  </div>
+
+  <div class="card">
+    <details id="diag">
+      <summary>Diagnostic Bluetooth</summary>
+      <div id="map">Compteur de la bague : <b>pas encore détecté</b></div>
+      <p class="small">Après la connexion, appuyez 4 ou 5 fois sur la bague : la page repère seule l'octet qui augmente de 1 à chaque appui.</p>
+      <div class="row">
+        <button class="btn" id="relearn">Réapprendre</button>
+        <button class="btn" id="copy">Copier le journal</button>
+      </div>
+      <label for="extra" style="margin-top:12px">UUID de service supplémentaire (vu dans nRF Connect)</label>
+      <div class="row"><input id="extra" placeholder="ex. 0000fff0-0000-1000-8000-00805f9b34fb"><button class="btn" id="saveExtra" style="flex:0 0 auto">OK</button></div>
+      <div id="log"></div>
+    </details>
+  </div>
+</main>
+
+<script src="native.js"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k,d){ try{ const v = localStorage.getItem('zikr_'+k); return v===null?d:JSON.parse(v);}catch(e){return d;} },
+    set(k,v){ try{ localStorage.setItem('zikr_'+k, JSON.stringify(v)); }catch(e){} }
+  };
+
+  // ---------- État du compteur ----------
+  let st = store.get('state', {target:452, total:0, cur:0, rounds:0, name:''});
+  if(!st.goalRounds) st.goalRounds = 1;
+  const C = 741.4;
+  function render(){
+    $('cur').textContent = st.cur;
+    $('tgtLbl').textContent = '/ ' + st.target;
+    $('rounds').textContent = st.rounds + ' / ' + st.goalRounds;
+    $('left').textContent = Math.max(0, st.target*st.goalRounds - st.total);
+    const fin = st.rounds >= st.goalRounds;
+    $('done').style.display = fin ? 'block' : 'none';
+    $('hint').style.display = fin ? 'none' : 'block';
+    $('goalRounds').value = st.goalRounds;
+    $('total').textContent = st.total;
+    $('zname').textContent = st.name || '';
+    $('arc').setAttribute('stroke-dashoffset', C * (1 - st.cur / st.target));
+    $('target').value = st.target;
+    $('zikr').value = st.name;
+    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('sel', +c.dataset.v === st.target));
+    store.set('state', st);
+  }
+  const NAT = window.ZikrNative && window.ZikrNative.isNative ? window.ZikrNative : null;
+  function buzz(fin){
+    if(NAT){ NAT.vibrate(fin?900:300); if(fin) setTimeout(()=>NAT.vibrate(900),1200); return; }
+    try{ navigator.vibrate && navigator.vibrate(fin ? [600,150,600,150,600] : [250,120,250]); }catch(e){}
+  }
+  function add(n){
+    for(let i=0;i<n;i++){
+      st.total++; st.cur++;
+      if(st.cur >= st.target){
+        st.cur = 0; st.rounds++;
+        const fin = st.rounds === st.goalRounds;
+        buzz(fin);
+        const d=$('dial'); d.classList.remove('flash'); void d.offsetWidth; d.classList.add('flash');
+      }
+    }
+    render();
+  }
+  [33,99,100,313,452,1000].forEach(v=>{
+    const b=document.createElement('button'); b.className='chip'; b.dataset.v=v; b.textContent=v;
+    b.onclick=()=>{ st.target=v; if(st.cur>=v) st.cur=0; render(); };
+    $('chips').appendChild(b);
+  });
+  $('target').onchange = e => { const v = Math.max(1, parseInt(e.target.value)||33); st.target=v; if(st.cur>=v) st.cur=0; render(); };
+  $('goalRounds').onchange = e => { st.goalRounds = Math.max(1, parseInt(e.target.value)||1); render(); };
+  $('zikr').oninput = e => { st.name = e.target.value; render(); };
+  $('dial').onclick = () => add(1);
+  let resetArm = 0;
+  $('reset').onclick = () => {
+    if(Date.now() - resetArm > 3000){ resetArm = Date.now(); $('reset').textContent='Confirmer ?'; setTimeout(()=>$('reset').textContent='Remettre à zéro',3000); return; }
+    st.total=0; st.cur=0; st.rounds=0; resetArm=0; $('reset').textContent='Remettre à zéro'; render();
+  };
+  render();
+
+  // ---------- Journal ----------
+  const logLines=[];
+  function log(s){ const t=new Date().toLocaleTimeString(); logLines.push(t+'  '+s); if(logLines.length>400) logLines.shift(); $('log').textContent=logLines.slice(-120).join('\n'); $('log').scrollTop=1e9; }
+  $('copy').onclick = async () => { try{ await navigator.clipboard.writeText(logLines.join('\n')); $('copy').textContent='Copié ✓'; }catch(e){ $('copy').textContent='Copie impossible'; } setTimeout(()=>$('copy').textContent='Copier le journal',2000); };
+  const hex = b => Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(' ');
+
+  // ---------- Détection automatique du compteur ----------
+  // mapping = {key:'charUUID', off, fmt, len, head}
+  let mapping = store.get('mapping', null);
+  let scores = {}, prev = {}, lastRing = null;
+  function showMap(){ $('map').innerHTML = 'Compteur de la bague : ' + (mapping ? '<b style="color:var(--ok)">détecté</b> ('+mapping.fmt+' à l\'octet '+mapping.off+')' : '<b>pas encore détecté</b> — appuyez plusieurs fois sur la bague'); }
+  showMap();
+  $('relearn').onclick = () => { mapping=null; scores={}; prev={}; lastRing=null; store.set('mapping',null); showMap(); log('Apprentissage réinitialisé'); };
+
+  const FMTS = {
+    u8:   (b,o)=> o<b.length ? b[o] : null,
+    u16le:(b,o)=> o+1<b.length ? b[o]|(b[o+1]<<8) : null,
+    u16be:(b,o)=> o+1<b.length ? (b[o]<<8)|b[o+1] : null,
+    u32le:(b,o)=> o+3<b.length ? (b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0 : null,
+    u32be:(b,o)=> o+3<b.length ? ((b[o]<<24)|(b[o+1]<<16)|(b[o+2]<<8)|b[o+3])>>>0 : null
+  };
+  function asciiNum(b){ const s=String.fromCharCode(...b); const m=s.match(/(\d{1,5})/); return m?parseInt(m[1]):null; }
+
+  function onRingValue(v){
+    if(lastRing === null){ lastRing = v; log('Valeur bague initiale : '+v); return; }
+    if(v > lastRing && v - lastRing < 200){ add(v - lastRing); }
+    else if(v < lastRing){ log('La bague a été remise à zéro ('+lastRing+' → '+v+')'); }
+    lastRing = v;
+  }
+
+  function onPacket(key, b){
+    log(key.slice(4,8)+' ← '+hex(b));
+    if(mapping){
+      if(mapping.key===key && b.length===mapping.len && b[0]===mapping.head){
+        const v = mapping.fmt==='ascii' ? asciiNum(b) : FMTS[mapping.fmt](b, mapping.off);
+        if(v!==null) onRingValue(v);
+      }
+      return;
+    }
+    const p = prev[key];
+    if(p && p.length===b.length && p[0]===b[0]){
+      const cands=[];
+      for(const f in FMTS) for(let o=0;o<b.length;o++){ const a=FMTS[f](p,o), c=FMTS[f](b,o); if(a!==null && c!==null) cands.push([f,o,a,c]); }
+      const aa=asciiNum(p), ab=asciiNum(b); if(aa!==null && ab!==null) cands.push(['ascii',0,aa,ab]);
+      for(const [f,o,a,c] of cands){
+        const id=key+'|'+f+'|'+o+'|'+b.length+'|'+b[0];
+        if(c===a+1) scores[id]=(scores[id]||0)+1; else if(c!==a) scores[id]=0;
+      }
+      const best = Object.entries(scores).filter(([,s])=>s>=3).sort((x,y)=>y[1]-x[1]);
+      if(best.length){
+        // préférer u8 < u16 < u32 en cas d'égalité (le plus simple)
+        const top=best[0][1]; const ties=best.filter(x=>x[1]===top).map(x=>x[0]);
+        const order=['u8','u16le','u16be','u32le','u32be','ascii'];
+        ties.sort((x,y)=>order.indexOf(x.split('|')[1])-order.indexOf(y.split('|')[1]));
+        const [k,f,o,len,head]=ties[0].split('|');
+        // u8 peut être un débordement d'un u16 ; si u16le à la même position marche aussi, le préférer
+        let fmt=f; if(f==='u8' && scores[k+'|u16le|'+o+'|'+len+'|'+head]===top) fmt='u16le';
+        mapping={key:k, off:+o, fmt, len:+len, head:+head};
+        store.set('mapping',mapping); showMap(); log('✓ Compteur détecté : '+fmt+' octet '+o);
+        const v = fmt==='ascii'?asciiNum(b):FMTS[fmt](b,+o); lastRing=v;
+      }
+    }
+    prev[key]=b;
+  }
+
+  // ---------- Bluetooth ----------
+  const COMMON = [0xfff0,0xffe0,0xfee7,0xfee0,0xfee1,0xff00,0xffb0,0xffc0,0xffd0,0xfe59,0xae00,0xae30,0x1800,0x1801,0x180a,0x180f,0x180d,0xfd00,0xfdf0,0xf000,0xa800,0xff10,0xff12,0xd0ff,0x1910,
+    '6e400001-b5a3-f393-e0a9-e50e24dcca9e','0000fee9-0000-1000-8000-00805f9b34fb','49535343-fe7d-4ae5-8fa9-9fafd205e455','0000ffc0-0000-1000-8000-00805f9b34fb'];
+  let extra = store.get('extra', []);
+  $('saveExtra').onclick = () => { const u=$('extra').value.trim().toLowerCase(); if(u){ extra.push(u); store.set('extra',extra); log('UUID ajouté : '+u+' — reconnectez la bague'); $('extra').value=''; } };
+
+  let device=null;
+  function setStatus(on, txt){ $('status').className='status'+(on?' on':''); $('status').textContent=txt; }
+
+  let natDev=null;
+  function natDisc(dev){ setStatus(false,'Déconnectée'); log('Déconnectée — nouvelle tentative…');
+    setTimeout(async()=>{ try{ setStatus(false,'Connexion…'); await NAT.reconnect(dev,onPacket,natDisc,log); setStatus(true,dev.name||'Connectée'); }catch(e){ log('Reconnexion échouée : '+e.message); setStatus(false,'Déconnectée'); } },2000); }
+  async function connect(){
+    if(NAT){
+      try{ setStatus(false,'Recherche…'); natDev = await NAT.connect(onPacket, natDisc, log); setStatus(true, natDev.name||'Connectée'); }
+      catch(e){ log('Erreur : '+(e.message||e)); setStatus(false,'Échec connexion'); $('diag').open=true; }
+      try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){}
+      return;
+    }
+    if(!navigator.bluetooth){ log('Web Bluetooth indisponible : Bluetooth non disponible.'); setStatus(false,'Bluetooth indisponible'); $('diag').open=true; return; }
+    try{
+      device = await navigator.bluetooth.requestDevice({ acceptAllDevices:true, optionalServices: COMMON.concat(extra) });
+      device.addEventListener('gattserverdisconnected', ()=>{ setStatus(false,'Déconnectée'); log('Déconnectée — nouvelle tentative…'); setTimeout(gatt, 1500); });
+      await gatt();
+    }catch(e){ log('Erreur : '+e.message); setStatus(false,'Échec connexion'); }
+  }
+  async function gatt(){
+    if(!device) return;
+    try{
+      setStatus(false,'Connexion…');
+      const server = await device.gatt.connect();
+      setStatus(true, device.name || 'Connectée');
+      log('Connectée à '+(device.name||'?'));
+      let services=[]; try{ services = await server.getPrimaryServices(); }catch(e){ log('Aucun service accessible : '+e.message); }
+      if(!services.length){ log('Aucun service lisible. Ouvrez nRF Connect, notez l\'UUID du service personnalisé et ajoutez-le ci-dessous.'); $('diag').open=true; }
+      for(const s of services){
+        log('Service '+s.uuid);
+        let chars=[]; try{ chars = await s.getCharacteristics(); }catch(e){}
+        for(const c of chars){
+          const p=c.properties; log('  car. '+c.uuid+' ['+(p.notify?'notify ':'')+(p.indicate?'indicate ':'')+(p.read?'read ':'')+(p.write||p.writeWithoutResponse?'write':'')+']');
+          if(p.notify||p.indicate){
+            try{ c.addEventListener('characteristicvaluechanged', ev=>onPacket(c.uuid, new Uint8Array(ev.target.value.buffer))); await c.startNotifications(); }catch(e){ log('   notif. refusée : '+e.message); }
+          } else if(p.read){
+            try{ const v=await c.readValue(); log('   lu : '+hex(new Uint8Array(v.buffer))); }catch(e){}
+          }
+        }
+      }
+      try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){}
+    }catch(e){ log('Erreur GATT : '+e.message); setStatus(false,'Échec connexion'); }
+  }
+  $('connect').onclick = connect;
+
+})();
+</script>
+</body>
+</html>
