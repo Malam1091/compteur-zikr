@@ -94,6 +94,15 @@
   <!-- ===== Compteur ===== -->
   <section class="view show" id="v-count">
     <div class="card">
+      <div id="catchup" style="display:none;background:var(--deep);border:1px solid var(--gold);border-radius:12px;padding:12px;margin-bottom:10px">
+        <div id="cuText" style="font-size:14px;margin-bottom:8px"></div>
+        <label for="cuZikr">Ajouter à</label>
+        <select id="cuZikr"></select>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="cuNo">Ignorer</button>
+          <button class="btn gold" id="cuYes">Ajouter</button>
+        </div>
+      </div>
       <div id="zname"></div>
       <button id="dial" aria-label="Ajouter 1">
         <svg viewBox="0 0 270 270"><circle cx="135" cy="135" r="122" fill="none" stroke="var(--line)" stroke-width="12"/>
@@ -339,7 +348,7 @@
       const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
       d.innerHTML='<button class="zt"><div class="zn">'+(z.rounds>=z.goalRounds?'✓ ':'')+esc(z.name||'Zikr')+'</div><div class="zs">'+z.target+' × '+z.goalRounds+' tours · '+fmtN(z.total)+' / '+fmtN(goal)+' ('+p+' %)</div><div class="bar"><i style="width:'+p+'%"></i></div></button>'
         +'<button class="zd">'+(delArm===z.id?'Supprimer ?':'🗑')+'</button>';
-      d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; delArm=null; pick(); render(); document.querySelector('nav button[data-v="count"]').click(); };
+      d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; delArm=null; pick(); anchorNow(st); render(); document.querySelector('nav button[data-v="count"]').click(); };
       d.querySelector('.zd').onclick=()=>{
         if(delArm!==z.id){ delArm=z.id; renderList(); setTimeout(()=>{ if(delArm===z.id){ delArm=null; renderList(); } },3000); return; }
         delArm=null; db.zikrs=db.zikrs.filter(x=>x.id!==z.id);
@@ -353,7 +362,7 @@
   $('nCancel').onclick=()=>{ $('newForm').style.display='none'; };
   $('nCreate').onclick=()=>{
     const z=mk($('nName').value.trim()||('Zikr '+(db.zikrs.length+1)), Math.max(1,parseInt($('nTarget').value)||33), Math.max(1,parseInt($('nRounds').value)||1));
-    db.zikrs.push(z); db.activeId=z.id; pick();
+    db.zikrs.push(z); db.activeId=z.id; pick(); anchorNow(st);
     $('nName').value=''; $('newForm').style.display='none'; render();
     document.querySelector('nav button[data-v="count"]').click();
   };
@@ -417,7 +426,7 @@
   let resetArm = 0;
   $('reset').onclick = () => {
     if(Date.now() - resetArm > 3000){ resetArm = Date.now(); $('reset').textContent='Confirmer ?'; setTimeout(()=>$('reset').textContent='↺ Zéro',3000); return; }
-    st.total=0; st.cur=0; st.rounds=0; st.secs=0; resetArm=0; timerOn=false; $('reset').textContent='↺ Zéro'; render();
+    st.total=0; st.cur=0; st.rounds=0; st.secs=0; anchorNow(st); resetArm=0; timerOn=false; $('reset').textContent='↺ Zéro'; render();
   };
 
   // ---------- Minuteur (se met en pause après 1 min sans compter) ----------
@@ -505,6 +514,11 @@
   let mapping = store.get('mapping', null);
   if(mapping && mapping.key && mapping.key.startsWith('0000d002') && mapping.fmt!=='iqibla') mapping=null; // ancienne détection erronée
   let scores = {}, prev = {}, lastRing = null;
+  let savedRing = store.get('lastRing', null);   // dernier nombre de la bague, gardé même application fermée
+  let ringSaveT = null;
+  function saveRing(){ if(ringSaveT) return; ringSaveT=setTimeout(()=>{ ringSaveT=null; store.set('lastRing', lastRing); },1000); }
+  // Point de départ du zikr sur la bague : Synchroniser ne touche que ce zikr
+  function anchorNow(z){ if(lastRing!==null){ z.anchor={ring:lastRing,total:z.total}; store.set('db',db); } }
   function showMap(){ if(mapping && mapping.fmt==='iqibla'){ $('map').innerHTML='Compteur de la bague : <b style="color:var(--ok)">protocole iQIBLA</b> ('+(mapping.field===1?'compteur affiché':'total cumulé')+')'; return; }
     $('map').innerHTML = 'Compteur de la bague : ' + (mapping ? '<b style="color:var(--ok)">détecté</b> ('+mapping.fmt+' à l\'octet '+mapping.off+')' : '<b>pas encore détecté</b> — appuyez plusieurs fois sur la bague'); }
   showMap();
@@ -522,18 +536,49 @@
   function showRing(v){ $('ringRow').style.display='flex'; $('ringVal').textContent=v; }
   function onRingValue(v){
     showRing(v);
-    if(lastRing === null){ lastRing = v; log('Valeur bague initiale : '+v); return; }
+    if(lastRing === null){
+      lastRing = v; log('Valeur bague initiale : '+v);
+      // Les appuis faits pendant l'absence ne sont attribués à aucun zikr, sauf choix dans le bandeau
+      if(savedRing!==null){
+        db.zikrs.forEach(z=>{ if(!z.anchor) return; if(v>=savedRing) z.anchor.ring += v-savedRing; else z.anchor={ring:v,total:z.total}; });
+        store.set('db',db);
+      }
+      if(savedRing!==null && v>savedRing) askCatchup(v-savedRing, 'La bague a compté <b>'+(v-savedRing)+'</b> de plus pendant votre absence.');
+      else if(savedRing!==null && v<savedRing && v>0) askCatchup(v, 'La bague a été remise à zéro pendant votre absence. Elle a compté <b>'+v+'</b> depuis (les comptes d\'avant la remise à zéro ne peuvent pas être récupérés).');
+      if(!st.anchor) anchorNow(st);
+      saveRing(); return;
+    }
     if(v > lastRing && v - lastRing < 3000){ log('Bague '+lastRing+' → '+v+' (+'+(v-lastRing)+')'); add(v - lastRing); }
-    else if(v < lastRing){ log('La bague a été remise à zéro ('+lastRing+' → '+v+')'); }
-    lastRing = v;
+    else if(v < lastRing){ log('La bague a été remise à zéro ('+lastRing+' → '+v+')'); db.zikrs.forEach(z=>{ if(z.anchor) z.anchor={ring:v,total:z.total}; }); }
+    lastRing = v; saveRing();
   }
-  // Aligne le zikr sélectionné sur le nombre affiché par la bague
+  // Rattrapage des comptes faits avec la bague pendant que l'application était fermée
+  let cuN=0;
+  function askCatchup(n, html){
+    cuN=n; $('cuText').innerHTML=html;
+    $('cuZikr').innerHTML=db.zikrs.map(z=>'<option value="'+z.id+'"'+(z.id===st.id?' selected':'')+'>'+esc(z.name||'Zikr')+'</option>').join('');
+    $('catchup').style.display='block'; log('Rattrapage proposé : '+n);
+    document.querySelector('nav button[data-v="count"]').click();
+  }
+  $('cuNo').onclick=()=>{ $('catchup').style.display='none'; log('Rattrapage ignoré'); };
+  $('cuYes').onclick=()=>{
+    const z=db.zikrs.find(x=>x.id===$('cuZikr').value)||st;
+    const keep=st; st=z;            // compter sur le zikr choisi, avec vibrations de fin de tour
+    for(let i=0;i<cuN;i++){ z.total++; z.cur++; if(z.cur>=z.target){ z.cur=0; z.rounds++; } }
+    logHist(z.name, cuN); st=keep;
+    if(z.anchor) z.anchor.total+=cuN;
+    $('catchup').style.display='none'; log('Rattrapage : +'+cuN+' ajoutés à '+z.name); render();
+  };
+  // Synchroniser : remet le zikr EN COURS d'accord avec ce que la bague a compté depuis son point de départ
   $('syncBtn').onclick = () => {
     if(lastRing===null) return;
-    const diff = lastRing - st.total;
-    st.total = lastRing; st.rounds = Math.floor(st.total/st.target); st.cur = st.total % st.target;
-    if(diff) logHist(st.name, diff);
-    log('Synchronisé sur la bague : '+lastRing); render();
+    if(!st.anchor){ anchorNow(st); log('Point de départ enregistré pour '+st.name); return; }
+    const want = st.anchor.total + (lastRing - st.anchor.ring);
+    const diff = want - st.total;
+    if(want<0 || !diff){ log('Synchroniser : '+st.name+' déjà à jour'); return; }
+    st.total = want; st.rounds = Math.floor(want/st.target); st.cur = want % st.target;
+    logHist(st.name, diff);
+    log('Synchronisé '+st.name+' : '+(diff>0?'+':'')+diff); render();
   };
   // Calibrage : cherche le nombre affiché sur la bague dans les derniers messages reçus
   const lastPk = {};
@@ -543,7 +588,7 @@
     if(lastQ){
       const a=parseInt(lastQ[1],10), z=parseInt(lastQ[lastQ.length-1],10);
       const field = a===want ? 1 : (z===want ? 'last' : null);
-      if(field){ mapping={fmt:'iqibla', field}; store.set('mapping',mapping); lastRing=want; showMap(); showRing(want);
+      if(field){ mapping={fmt:'iqibla', field}; store.set('mapping',mapping); lastRing=want; saveRing(); anchorNow(st); showMap(); showRing(want);
         $('calMsg').textContent='✓ Calibré sur le '+(field===1?'compteur affiché':'total cumulé')+' de la bague.'; log('Calibré iQIBLA champ '+field); return; }
       $('calMsg').textContent='La bague envoie '+a+' et '+z+'. Appuyez une fois sur la bague, tapez le nouveau nombre affiché, puis Calibrer.'; return;
     }
