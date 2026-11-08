@@ -18,7 +18,8 @@
   h1{font-size:20px;font-weight:700;margin:2px 0 12px;display:flex;justify-content:space-between;align-items:center;color:var(--gold2)}
   .status{font-size:12px;font-weight:500;padding:4px 10px;border-radius:99px;background:var(--line);color:var(--mut)}
   .status.on{background:#1d3a2c;color:var(--ok)}
-  .card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+  body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--bgimg,none) center bottom/cover no-repeat}
+  .card{background:color-mix(in srgb,var(--card) 84%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-radius:16px;padding:14px;margin-bottom:12px}
   .ttl{font-size:15px;font-weight:600;display:block;margin-bottom:10px}
   label{font-size:12px;color:var(--mut);display:block;margin-bottom:6px}
   input,select{width:100%;background:var(--deep);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px;font-size:16px;user-select:text}
@@ -79,7 +80,7 @@
   .small{font-size:12px;color:var(--mut);margin:8px 0}
   #map{font-size:13px;margin:8px 0}
   /* Barre d'onglets */
-  nav{position:sticky;bottom:8px;z-index:5;box-shadow:0 -4px 16px rgba(0,0,0,.25);background:var(--card);border-radius:16px;display:flex;padding:6px;margin:0 0 12px}
+  nav{position:sticky;bottom:8px;z-index:5;box-shadow:0 -4px 16px rgba(0,0,0,.25);background:color-mix(in srgb,var(--card) 92%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-radius:16px;display:flex;padding:6px;margin:0 0 12px}
   nav button{flex:1;background:none;border:0;border-radius:12px;color:var(--mut);font-size:12px;padding:8px 0;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;gap:2px}
   nav button b{font-size:20px;font-weight:400}
   nav button.sel{color:var(--gold2);background:var(--deep)}
@@ -168,6 +169,14 @@
     <div class="card">
       <span class="ttl">Thème</span>
       <div class="themes" id="themes"></div>
+      <label style="margin-top:14px">Image de fond</label>
+      <div class="chips" id="bgChips">
+        <button class="chip" data-bg="theme">🕌 Image du thème</button>
+        <button class="chip" data-bg="custom">🖼 Ma photo…</button>
+        <button class="chip" data-bg="none">Aucune</button>
+      </div>
+      <input type="file" id="bgFile" accept="image/*" style="display:none">
+      <div class="small" id="bgMsg"></div>
     </div>
     <div class="card">
       <span class="ttl">Comptage</span>
@@ -230,11 +239,40 @@
   });
 
   // ---------- Réglages ----------
-  const opt = Object.assign({theme:'emeraude', vol:true, sound:false, vibC:false, vibL:true, autoSec:2, reminders:[]}, store.get('opt', {}));
+  const opt = Object.assign({theme:'emeraude', bg:'theme', vol:true, sound:false, vibC:false, vibL:true, autoSec:2, reminders:[]}, store.get('opt', {}));
   const saveOpt = () => store.set('opt', opt);
   const THEMES = [['emeraude','#0f1513','#d4a84b'],['nuit','#0d1220','#6ea8ff'],['sable','#1c1610','#e0a35a'],['rose','#1a1015','#e58aa8'],['clair','#f4f1ea','#0f7a5a']];
+  function applyBg(){
+    const light = opt.theme==='clair';
+    const veil = light ? 'rgba(244,241,234,.45)' : 'rgba(0,0,0,.40)';
+    let v='none';
+    if(opt.bg==='theme') v='url(bg/'+opt.theme+'.jpg)';
+    else if(opt.bg==='custom'){ const img=store.get('bgimg',null); if(img) v='linear-gradient('+veil+','+veil+'),url('+img+')'; }
+    document.body.style.setProperty('--bgimg', v);
+    document.querySelectorAll('#bgChips .chip').forEach(c=>c.classList.toggle('sel', c.dataset.bg===opt.bg));
+  }
+  document.querySelectorAll('#bgChips .chip').forEach(c=>c.onclick=()=>{
+    if(c.dataset.bg==='custom'){ $('bgFile').click(); return; }
+    opt.bg=c.dataset.bg; saveOpt(); applyBg();
+  });
+  $('bgFile').onchange=e=>{
+    const f=e.target.files&&e.target.files[0]; if(!f) return;
+    $('bgMsg').textContent='Chargement…';
+    const url=URL.createObjectURL(f), im=new Image();
+    im.onload=()=>{
+      const max=1280, k=Math.min(1, max/Math.max(im.width,im.height));
+      const cv=document.createElement('canvas'); cv.width=Math.round(im.width*k); cv.height=Math.round(im.height*k);
+      cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height); URL.revokeObjectURL(url);
+      try{ localStorage.setItem('zikr_bgimg', JSON.stringify(cv.toDataURL('image/jpeg',0.75))); opt.bg='custom'; saveOpt(); applyBg(); $('bgMsg').textContent=''; }
+      catch(err){ $('bgMsg').textContent="Image trop lourde, choisissez-en une autre."; }
+      e.target.value='';
+    };
+    im.onerror=()=>{ $('bgMsg').textContent="Impossible de lire cette image."; };
+    im.src=url;
+  };
   function renderThemes(){
     document.body.dataset.theme = opt.theme;
+    applyBg();
     $('themes').innerHTML = '';
     THEMES.forEach(([k,bg,ac])=>{
       const b=document.createElement('button'); b.className='th'+(opt.theme===k?' sel':''); b.title=k;
