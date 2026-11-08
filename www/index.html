@@ -41,6 +41,12 @@
   #log{font-family:ui-monospace,Menlo,monospace;font-size:11px;white-space:pre-wrap;max-height:220px;overflow:auto;background:#0b100e;border-radius:8px;padding:8px;margin-top:8px;color:#b9c8c1}
   .small{font-size:12px;color:var(--mut);margin:8px 0}
   #map{font-size:13px;margin:8px 0}
+  .zi{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#0f1513;margin-top:6px;border:1px solid transparent}
+  .zi.act{border-color:var(--gold)}
+  .zi .zt{flex:1;min-width:0;text-align:left;background:none;border:0;color:var(--txt);padding:0}
+  .zi .zn{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .zi .zs{font-size:12px;color:var(--mut);margin-top:2px}
+  .zi .zd{background:#3a2420;color:#f3b3a8;border:0;border-radius:10px;padding:8px 10px;font-size:13px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -69,7 +75,28 @@
   </div>
 
   <div class="card">
-    <label for="zikr">Zikr (facultatif)</label>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <b style="font-size:15px">Mes zikr</b>
+      <button class="chip" id="newBtn" style="background:var(--gold);color:#1a1405;font-weight:600">+ Nouveau</button>
+    </div>
+    <div id="newForm" style="display:none;background:#0f1513;border-radius:12px;padding:12px;margin-bottom:10px">
+      <label for="nName">Nom du zikr</label>
+      <input id="nName" placeholder="ex. Astaghfirullah">
+      <div class="row" style="margin-top:10px">
+        <div style="flex:1"><label for="nTarget">Objectif par tour</label><input id="nTarget" type="number" min="1" inputmode="numeric" value="452"></div>
+        <div style="flex:1"><label for="nRounds">Nombre de tours</label><input id="nRounds" type="number" min="1" inputmode="numeric" value="1"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="nCancel">Annuler</button>
+        <button class="btn gold" id="nCreate">Créer</button>
+      </div>
+    </div>
+    <div id="zlist"></div>
+  </div>
+
+  <div class="card">
+    <b style="font-size:15px;display:block;margin-bottom:10px">Réglages du zikr sélectionné</b>
+    <label for="zikr">Nom</label>
     <input id="zikr" placeholder="ex. SubhanAllah">
     <label for="target" style="margin-top:12px">Objectif par tour</label>
     <input id="target" type="number" min="1" inputmode="numeric" value="33">
@@ -103,9 +130,47 @@
     set(k,v){ try{ localStorage.setItem('zikr_'+k, JSON.stringify(v)); }catch(e){} }
   };
 
-  // ---------- État du compteur ----------
-  let st = store.get('state', {target:452, total:0, cur:0, rounds:0, name:''});
-  if(!st.goalRounds) st.goalRounds = 1;
+  // ---------- Plusieurs zikr ----------
+  const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const mk = (name,target,goalRounds) => ({id:uid(), name:name||'Zikr', target:target||33, goalRounds:goalRounds||1, total:0, cur:0, rounds:0});
+  let db = store.get('db', null);
+  if(!db || !Array.isArray(db.zikrs)){
+    const old = store.get('state', null);          // reprise de l'ancienne version
+    const z = mk(old&&old.name||'Zikr', old&&old.target||452, old&&old.goalRounds||1);
+    if(old){ z.total=old.total||0; z.cur=old.cur||0; z.rounds=old.rounds||0; }
+    db = {zikrs:[z], activeId:z.id};
+  }
+  let st;
+  function pick(){ st = db.zikrs.find(z=>z.id===db.activeId) || db.zikrs[0]; db.activeId = st.id; }
+  pick();
+  const esc = t => String(t).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let delArm = null;
+  function renderList(){
+    const box=$('zlist'); box.innerHTML='';
+    db.zikrs.forEach(z=>{
+      const fin = z.rounds>=z.goalRounds;
+      const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
+      d.innerHTML='<button class="zt"><div class="zn">'+(fin?'✓ ':'')+esc(z.name||'Zikr')+'</div><div class="zs">'+z.target+' × '+z.goalRounds+' tours · '+Math.min(z.rounds,z.goalRounds)+'/'+z.goalRounds+' faits</div></button>'
+        +'<button class="zd">'+(delArm===z.id?'Supprimer ?':'🗑')+'</button>';
+      d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; delArm=null; pick(); render(); window.scrollTo({top:0,behavior:'smooth'}); };
+      d.querySelector('.zd').onclick=()=>{
+        if(delArm!==z.id){ delArm=z.id; renderList(); setTimeout(()=>{ if(delArm===z.id){ delArm=null; renderList(); } },3000); return; }
+        delArm=null; db.zikrs=db.zikrs.filter(x=>x.id!==z.id);
+        if(!db.zikrs.length){ const n=mk('Zikr',33,1); db.zikrs.push(n); }
+        pick(); render();
+      };
+      box.appendChild(d);
+    });
+  }
+  $('newBtn').onclick=()=>{ const f=$('newForm'); f.style.display=f.style.display==='none'?'block':'none'; if(f.style.display==='block') $('nName').focus(); };
+  $('nCancel').onclick=()=>{ $('newForm').style.display='none'; };
+  $('nCreate').onclick=()=>{
+    const z=mk($('nName').value.trim()||('Zikr '+(db.zikrs.length+1)), Math.max(1,parseInt($('nTarget').value)||33), Math.max(1,parseInt($('nRounds').value)||1));
+    db.zikrs.push(z); db.activeId=z.id; pick();
+    $('nName').value=''; $('newForm').style.display='none'; render(); window.scrollTo({top:0,behavior:'smooth'});
+  };
+
+  // ---------- Compteur du zikr sélectionné ----------
   const C = 741.4;
   function render(){
     $('cur').textContent = st.cur;
@@ -115,14 +180,15 @@
     const fin = st.rounds >= st.goalRounds;
     $('done').style.display = fin ? 'block' : 'none';
     $('hint').style.display = fin ? 'none' : 'block';
-    $('goalRounds').value = st.goalRounds;
     $('total').textContent = st.total;
     $('zname').textContent = st.name || '';
     $('arc').setAttribute('stroke-dashoffset', C * (1 - st.cur / st.target));
-    $('target').value = st.target;
-    $('zikr').value = st.name;
-    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('sel', +c.dataset.v === st.target));
-    store.set('state', st);
+    if(document.activeElement!==$('goalRounds')) $('goalRounds').value = st.goalRounds;
+    if(document.activeElement!==$('target')) $('target').value = st.target;
+    if(document.activeElement!==$('zikr')) $('zikr').value = st.name;
+    document.querySelectorAll('#chips .chip').forEach(c => c.classList.toggle('sel', +c.dataset.v === st.target));
+    renderList();
+    store.set('db', db);
   }
   const NAT = window.ZikrNative && window.ZikrNative.isNative ? window.ZikrNative : null;
   function buzz(fin){
