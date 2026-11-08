@@ -4,12 +4,72 @@ import { Haptics } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Share } from '@capacitor/share';
 import { Clipboard } from '@capacitor/clipboard';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Geolocation } from '@capacitor/geolocation';
+import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
+import { Coordinates, CalculationMethod, PrayerTimes, Madhab } from 'adhan';
+
+// Horaires de prière calculés sur le téléphone (sans internet)
+window.ZikrPrayer = {
+  times(lat, lon, method, date) {
+    const m = (CalculationMethod[method] || CalculationMethod.MuslimWorldLeague)();
+    m.madhab = Madhab.Shafi;
+    const t = new PrayerTimes(new Coordinates(lat, lon), date || new Date(), m);
+    return { fajr: t.fajr, dhuhr: t.dhuhr, asr: t.asr, maghrib: t.maghrib, isha: t.isha };
+  }
+};
 
 const VolumeKeys = registerPlugin('VolumeKeys');
 const hex = v => Array.from(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)).map(x => x.toString(16).padStart(2, '0')).join(' ');
 
 window.ZikrNative = {
   isNative: Capacitor.isNativePlatform(),
+  // ---- Service au premier plan (écran éteint) ----
+  _bgOn: false,
+  async startBg(title, body, onStop) {
+    try {
+      await ForegroundService.requestPermissions();
+      if (!this._bgL) {
+        this._bgL = true;
+        await ForegroundService.addListener('buttonClicked', e => { if (e.buttonId === 1) onStop(); });
+        await ForegroundService.addListener('notificationTapped', () => ForegroundService.moveToForeground());
+      }
+      await ForegroundService.startForegroundService({ id: 7, title, body, smallIcon: 'ic_stat_tasbih', silent: true, buttons: [{ title: 'Arrêter', id: 1 }] });
+      this._bgOn = true; return true;
+    } catch (e) { return false; }
+  },
+  async updateBg(title, body) {
+    if (!this._bgOn) return;
+    try { await ForegroundService.updateForegroundService({ id: 7, title, body, smallIcon: 'ic_stat_tasbih', silent: true, buttons: [{ title: 'Arrêter', id: 1 }] }); } catch (e) {}
+  },
+  async stopBg() { if (!this._bgOn) return; this._bgOn = false; try { await ForegroundService.stopForegroundService(); } catch (e) {} },
+
+  // ---- Sauvegarde ----
+  async saveBackup(name, json) {
+    const r = await Filesystem.writeFile({ path: name, data: json, directory: Directory.Cache, encoding: Encoding.UTF8 });
+    await Share.share({ title: 'Sauvegarde Tasbih', text: 'Sauvegarde Tasbih', files: [r.uri] });
+  },
+
+  // ---- Position (pour les horaires de prière) ----
+  async position() {
+    try { await Geolocation.requestPermissions({ permissions: ['coarseLocation'] }); } catch (e) {}
+    const p = await Geolocation.getCurrentPosition({ enableHighAccuracy: false, timeout: 20000, maximumAge: 3600000 });
+    return { lat: p.coords.latitude, lon: p.coords.longitude };
+  },
+
+  // ---- Rappels aux heures de prière : items = [{id, at(Date), body}] (identifiants 200 à 299) ----
+  async setPrayerReminders(items) {
+    try {
+      const perm = await LocalNotifications.requestPermissions();
+      if (perm.display !== 'granted') return false;
+      const pend = await LocalNotifications.getPending();
+      const old = pend.notifications.filter(n => n.id >= 200 && n.id < 300);
+      if (old.length) await LocalNotifications.cancel({ notifications: old.map(n => ({ id: n.id })) });
+      if (items.length) await LocalNotifications.schedule({ notifications: items.map(i => ({ id: i.id, title: 'Tasbih', body: i.body, schedule: { at: i.at, allowWhileIdle: true } })) });
+      return true;
+    } catch (e) { return false; }
+  },
+
   async copy(text) { await Clipboard.write({ string: text }); },
   async share(text) { await Share.share({ title: 'Journal Tasbih', text }); },
   async vibrate(ms) { try { await Haptics.vibrate({ duration: ms }); } catch (e) {} },
@@ -30,7 +90,8 @@ window.ZikrNative = {
       const perm = await LocalNotifications.requestPermissions();
       if (perm.display !== 'granted') return false;
       const pend = await LocalNotifications.getPending();
-      if (pend.notifications.length) await LocalNotifications.cancel({ notifications: pend.notifications.map(n => ({ id: n.id })) });
+      const old = pend.notifications.filter(n => n.id >= 100 && n.id < 200);
+      if (old.length) await LocalNotifications.cancel({ notifications: old.map(n => ({ id: n.id })) });
       const notifications = times.map((t, i) => {
         const [h, m] = t.split(':').map(Number);
         return { id: 100 + i, title: 'Tasbih', body: label || "C'est l'heure de votre zikr", schedule: { on: { hour: h, minute: m }, allowWhileIdle: true } };

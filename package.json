@@ -11,9 +11,13 @@
     "@capacitor/android": "^8.6.0",
     "@capacitor/clipboard": "^8.0.1",
     "@capacitor/core": "^8.6.0",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/geolocation": "^8.2.4",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/local-notifications": "^8.3.1",
-    "@capacitor/share": "^8.0.3"
+    "@capacitor/share": "^8.0.3",
+    "@capawesome-team/capacitor-android-foreground-service": "^8.1.0",
+    "adhan": "^4.4.6"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.0",
