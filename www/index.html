@@ -224,6 +224,7 @@
     document.querySelectorAll('nav button').forEach(x => x.classList.toggle('sel', x===b));
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('show', v.id==='v-'+b.dataset.v));
     if(b.dataset.v==='hist') renderHist();
+    if(b.dataset.v==='list') renderList();
     window.scrollTo(0,0);
   });
 
@@ -279,7 +280,7 @@
   const dayKey = (d=new Date()) => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   function logHist(name, n){
     const k=dayKey(); hist[k]=hist[k]||{}; const nm=name||'Zikr';
-    hist[k][nm]=Math.max(0,(hist[k][nm]||0)+n); store.set('hist',hist);
+    hist[k][nm]=Math.max(0,(hist[k][nm]||0)+n);
   }
   let st;
   function pick(){ st = db.zikrs.find(z=>z.id===db.activeId) || db.zikrs[0]; db.activeId = st.id; }
@@ -316,7 +317,9 @@
   // ---------- Compteur ----------
   const C = 766.5;
   const mmss = s => { s=Math.floor(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):String(m).padStart(2,'0'))+':'+String(x).padStart(2,'0'); };
-  function render(){
+  let rafPending=false, saveT=null;
+  function scheduleRender(){ if(rafPending) return; rafPending=true; requestAnimationFrame(()=>{ rafPending=false; render(true); }); }
+  function render(light){
     $('zname').textContent = st.name || '';
     $('cur').textContent = st.cur;
     $('tgtLbl').textContent = '/ ' + st.target;
@@ -333,8 +336,9 @@
     if(document.activeElement!==$('target')) $('target').value = st.target;
     if(document.activeElement!==$('zikr')) $('zikr').value = st.name;
     document.querySelectorAll('#chips .chip').forEach(c => c.classList.toggle('sel', +c.dataset.v === st.target));
-    renderList();
-    store.set('db', db);
+    if(!light || $('v-list').classList.contains('show')) renderList();
+    if(light){ if(!saveT) saveT=setTimeout(()=>{ saveT=null; store.set('db',db); store.set('hist',hist); },800); }
+    else store.set('db', db);
   }
   function add(n){
     for(let i=0;i<n;i++){
@@ -347,14 +351,14 @@
     }
     logHist(st.name, n);
     touchTimer();
-    render();
+    scheduleRender();
   }
   function sub(){
     if(st.total<=0) return;
     st.total--; st.cur--;
     if(st.cur < 0){ if(st.rounds>0){ st.rounds--; st.cur = st.target-1; } else st.cur = 0; }
     logHist(st.name, -1);
-    render();
+    scheduleRender();
   }
   [33,99,100,313,452,1000].forEach(v=>{
     const b=document.createElement('button'); b.className='chip'; b.dataset.v=v; b.textContent=v;
@@ -439,7 +443,8 @@
 
   // ---------- Journal ----------
   const logLines=[];
-  function log(s){ const t=new Date().toLocaleTimeString(); logLines.push(t+'  '+s); if(logLines.length>400) logLines.shift(); $('log').textContent=logLines.slice(-120).join('\n'); $('log').scrollTop=1e9; }
+  function log(s){ const t=new Date().toLocaleTimeString(); logLines.push(t+'  '+s); if(logLines.length>400) logLines.shift(); if($('diag').open){ $('log').textContent=logLines.slice(-120).join('\n'); $('log').scrollTop=1e9; } }
+  $('diag').addEventListener('toggle', ()=>{ if($('diag').open){ $('log').textContent=logLines.slice(-120).join('\n'); $('log').scrollTop=1e9; } });
   $('copy').onclick = async () => { try{ await navigator.clipboard.writeText(logLines.join('\n')); $('copy').textContent='Copié ✓'; }catch(e){ $('copy').textContent='Copie impossible'; } setTimeout(()=>$('copy').textContent='Copier le journal',2000); };
   const hex = b => Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(' ');
 
@@ -462,7 +467,7 @@
 
   function onRingValue(v){
     if(lastRing === null){ lastRing = v; log('Valeur bague initiale : '+v); return; }
-    if(v > lastRing && v - lastRing < 200){ add(v - lastRing); }
+    if(v > lastRing && v - lastRing < 3000){ add(v - lastRing); }
     else if(v < lastRing){ log('La bague a été remise à zéro ('+lastRing+' → '+v+')'); }
     lastRing = v;
   }
@@ -511,12 +516,26 @@
   let device=null;
   function setStatus(on, txt){ $('status').className='status'+(on?' on':''); $('status').textContent=txt; }
 
-  let natDev=null;
-  function natDisc(dev){ setStatus(false,'Déconnectée'); log('Déconnectée — nouvelle tentative…');
-    setTimeout(async()=>{ try{ setStatus(false,'Connexion…'); await NAT.reconnect(dev,onPacket,natDisc,log); setStatus(true,dev.name||'Connectée'); }catch(e){ log('Reconnexion échouée : '+e.message); setStatus(false,'Déconnectée'); } },2000); }
+  let natDev=null, wantConn=false, connected=false, retryT=null, tries=0;
+  function natDisc(dev){
+    connected=false; if(!wantConn) return;
+    setStatus(false,'Reconnexion…'); log('Bague déconnectée — reconnexion automatique');
+    scheduleRetry(dev);
+  }
+  function scheduleRetry(dev){
+    clearTimeout(retryT);
+    const wait=Math.min(10000, 1500*Math.pow(1.5,tries));
+    retryT=setTimeout(async()=>{
+      if(!wantConn || connected) return;
+      try{ await NAT.reconnect(dev,onPacket,natDisc,log); connected=true; tries=0; setStatus(true,dev.name||'Connectée'); log('Reconnectée ✓'); }
+      catch(e){ tries++; log('Reconnexion échouée ('+tries+') : '+(e.message||e)); setStatus(false,'Reconnexion…'); scheduleRetry(dev); }
+    }, wait);
+  }
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && NAT && natDev && wantConn && !connected){ tries=0; scheduleRetry(natDev); } });
   async function connect(){
     if(NAT){
-      try{ setStatus(false,'Recherche…'); natDev = await NAT.connect(onPacket, natDisc, log); setStatus(true, natDev.name||'Connectée'); }
+      if(connected && natDev){ wantConn=false; clearTimeout(retryT); await NAT.disconnect(natDev); connected=false; setStatus(false,'Bague déconnectée'); $('connect').textContent='Connecter la bague'; return; }
+      try{ setStatus(false,'Recherche…'); natDev = await NAT.connect(onPacket, natDisc, log); wantConn=true; connected=true; tries=0; setStatus(true, natDev.name||'Connectée'); $('connect').textContent='Déconnecter la bague'; }
       catch(e){ log('Erreur : '+(e.message||e)); setStatus(false,'Échec connexion'); $('diag').open=true; }
       try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){}
       return;

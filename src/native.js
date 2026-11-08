@@ -42,13 +42,20 @@ window.ZikrNative = {
     const dev = await BleClient.requestDevice({});
     log('Appareil choisi : ' + (dev.name || dev.deviceId));
     await BleClient.connect(dev.deviceId, () => onDisconnect(dev));
+    await this.fast(dev, log);
     await this.subscribe(dev, onPacket, log);
     return dev;
   },
   async reconnect(dev, onPacket, onDisconnect, log) {
-    await BleClient.connect(dev.deviceId, () => onDisconnect(dev));
+    await BleClient.connect(dev.deviceId, () => onDisconnect(dev), { timeout: 8000 });
+    await this.fast(dev, log);
     await this.subscribe(dev, onPacket, log);
   },
+  // Liaison rapide : réduit la latence entre la bague et l'application
+  async fast(dev, log) {
+    try { await BleClient.requestConnectionPriority(dev.deviceId, 1); log('Mode rapide activé'); } catch (e) { log('Mode rapide indisponible : ' + e.message); }
+  },
+  async disconnect(dev) { try { await BleClient.disconnect(dev.deviceId); } catch (e) {} },
   async subscribe(dev, onPacket, log) {
     const services = await BleClient.getServices(dev.deviceId);
     if (!services.length) log('Aucun service trouvé sur la bague.');
