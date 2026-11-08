@@ -88,6 +88,11 @@
   nav button{flex:1;background:none;border:0;border-radius:12px;color:var(--mut);font-size:12px;padding:8px 0;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;gap:2px}
   nav button b{font-size:20px;font-weight:400}
   nav button.sel{color:var(--gold2);background:var(--deep)}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:none;align-items:flex-end;justify-content:center}
+  .modal.show{display:flex}
+  .sheet{background:var(--card);width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + var(--safe-area-inset-bottom,0px));max-height:80vh;overflow:auto}
+  .sig{font-size:12px;color:var(--mut);white-space:nowrap}
+  .tag{font-size:11px;background:var(--gold);color:var(--ink);border-radius:99px;padding:2px 8px;margin-left:6px;vertical-align:middle}
   .empty{color:var(--mut);text-align:center;padding:16px 0;font-size:14px}
 </style>
 </head>
@@ -209,6 +214,10 @@
       <div class="small" id="rMsg"></div>
     </div>
     <div class="card">
+      <span class="ttl">Mes bagues</span>
+      <div id="ringList"></div>
+    </div>
+    <div class="card">
       <details id="diag">
         <summary>Bague Bluetooth — diagnostic</summary>
         <div id="map">Compteur de la bague : <b>pas encore détecté</b></div>
@@ -236,6 +245,19 @@
   <button class="btn gold" id="connect" style="width:100%">Connecter la bague</button>
 </main>
 
+
+<div class="modal" id="pickM"><div class="sheet">
+  <div class="row" style="justify-content:space-between;margin-bottom:8px"><b style="font-size:16px">Choisir une bague</b><span class="sig" id="pickState">Recherche…</span></div>
+  <div class="small" style="margin-top:0">Appuyez sur le bouton de la bague pour la réveiller si elle n'apparaît pas.</div>
+  <div id="pickList"></div>
+  <div class="row" style="margin-top:12px"><button class="btn" id="pickCancel">Annuler</button><button class="btn" id="pickAgain">Rechercher</button></div>
+</div></div>
+<div class="modal" id="nameM"><div class="sheet">
+  <b style="font-size:16px;display:block;margin-bottom:6px">Nom de la bague</b>
+  <div class="small" style="margin-top:0" id="nameInfo"></div>
+  <input id="ringName" dir="auto" placeholder="ex. Bague noire, Bague de travail…">
+  <div class="row" style="margin-top:12px"><button class="btn" id="nameCancel">Plus tard</button><button class="btn gold" id="nameOk">Enregistrer</button></div>
+</div></div>
 
 <script src="native.js"></script>
 <script>
@@ -531,11 +553,18 @@
   let mapping = store.get('mapping', null);
   if(mapping && mapping.key && mapping.key.startsWith('0000d002') && mapping.fmt!=='iqibla') mapping=null; // ancienne détection erronée
   let scores = {}, prev = {}, lastRing = null;
-  let savedRing = store.get('lastRing', null);   // dernier nombre de la bague, gardé même application fermée
+  // Mes bagues : { id: { nick, name, last } } — chaque bague garde son propre dernier nombre
+  let rings = store.get('rings', {});
+  let curRing = null;                              // identifiant de la bague connectée
+  let savedRing = store.get('lastRing', null);     // (ancienne version : une seule bague)
   let ringSaveT = null;
-  function saveRing(){ if(ringSaveT) return; ringSaveT=setTimeout(()=>{ ringSaveT=null; store.set('lastRing', lastRing); },1000); }
+  const saveRings = () => store.set('rings', rings);
+  function saveRing(){ if(ringSaveT) return; ringSaveT=setTimeout(()=>{ ringSaveT=null;
+    if(curRing && rings[curRing]){ rings[curRing].last=lastRing; saveRings(); } else store.set('lastRing', lastRing); },1000); }
+  const shortId = id => String(id).replace(/[^0-9A-Fa-f]/g,'').slice(-4).toUpperCase();
+  const ringLabel = (id, name) => (rings[id] && rings[id].nick) || ((name||'Bague')+' · '+shortId(id));
   // Point de départ du zikr sur la bague : Synchroniser ne touche que ce zikr
-  function anchorNow(z){ if(lastRing!==null){ z.anchor={ring:lastRing,total:z.total}; store.set('db',db); } }
+  function anchorNow(z){ if(lastRing!==null){ z.anchor={ring:lastRing,total:z.total,ringId:curRing}; store.set('db',db); } }
   function showMap(){ if(mapping && mapping.fmt==='iqibla'){ $('map').innerHTML='Compteur de la bague : <b style="color:var(--ok)">protocole iQIBLA</b> ('+(mapping.field===1?'compteur affiché':'total cumulé')+')'; return; }
     $('map').innerHTML = 'Compteur de la bague : ' + (mapping ? '<b style="color:var(--ok)">détecté</b> ('+mapping.fmt+' à l\'octet '+mapping.off+')' : '<b>pas encore détecté</b> — appuyez plusieurs fois sur la bague'); }
   showMap();
@@ -557,12 +586,15 @@
       lastRing = v; log('Valeur bague initiale : '+v);
       // Les appuis faits pendant l'absence ne sont attribués à aucun zikr, sauf choix dans le bandeau
       if(savedRing!==null){
-        db.zikrs.forEach(z=>{ if(!z.anchor) return; if(v>=savedRing) z.anchor.ring += v-savedRing; else z.anchor={ring:v,total:z.total}; });
+        db.zikrs.forEach(z=>{ if(!z.anchor) return;
+          if((z.anchor.ringId||null)!==curRing) z.anchor={ring:v,total:z.total,ringId:curRing};
+          else if(v>=savedRing) z.anchor.ring += v-savedRing; else z.anchor={ring:v,total:z.total,ringId:curRing}; });
         store.set('db',db);
       }
-      if(savedRing!==null && v>savedRing) askCatchup(v-savedRing, 'La bague a compté <b>'+(v-savedRing)+'</b> de plus pendant votre absence.');
-      else if(savedRing!==null && v<savedRing && v>0) askCatchup(v, 'La bague a été remise à zéro pendant votre absence. Elle a compté <b>'+v+'</b> depuis (les comptes d\'avant la remise à zéro ne peuvent pas être récupérés).');
-      if(!st.anchor) anchorNow(st);
+      const rn = curRing ? '<b>'+esc(ringLabel(curRing))+'</b>' : 'La bague';
+      if(savedRing!==null && v>savedRing) askCatchup(v-savedRing, rn+' a compté <b>'+(v-savedRing)+'</b> de plus pendant votre absence.');
+      else if(savedRing!==null && v<savedRing && v>0) askCatchup(v, rn+' a été remise à zéro pendant votre absence. Elle a compté <b>'+v+'</b> depuis (les comptes d\'avant la remise à zéro ne peuvent pas être récupérés).');
+      if(!st.anchor || (st.anchor.ringId||null)!==curRing) anchorNow(st);
       saveRing(); return;
     }
     if(v > lastRing && v - lastRing < 3000){ log('Bague '+lastRing+' → '+v+' (+'+(v-lastRing)+')'); add(v - lastRing); }
@@ -708,18 +740,83 @@
     retryT=setTimeout(async()=>{
       if(!wantConn || connected || busy) return;
       busy=true;
-      try{ await NAT.reconnect(dev,onPacket,natDisc,log); connected=true; connAt=Date.now(); tries=0; setStatus(true,dev.name||'Connectée'); log('Reconnectée ✓'); }
+      try{ await NAT.reconnect(dev,onPacket,natDisc,log); connected=true; connAt=Date.now(); tries=0; setStatus(true,ringLabel(dev.deviceId,dev.name)); log('Reconnectée ✓'); }
       catch(e){ tries++; log('Reconnexion échouée ('+tries+') : '+(e.message||e)); setStatus(false,'Reconnexion…'); busy=false; scheduleRetry(dev); return; }
       busy=false;
     }, wait);
   }
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && NAT && natDev && wantConn && !connected){ tries=0; scheduleRetry(natDev); } });
+  function afterConnect(dev){
+    wantConn=true; connected=true; connAt=Date.now(); tries=0;
+    setStatus(true, ringLabel(dev.deviceId, dev.name)); $('connect').textContent='Déconnecter la bague';
+    if(!rings[dev.deviceId] || !rings[dev.deviceId].nick) askName(dev);
+    try{ if('wakeLock' in navigator) navigator.wakeLock.request('screen'); }catch(e){}
+  }
+  function useRing(dev){
+    // Nouvelle bague (ou première de la séance) : repartir de sa propre mémoire
+    if(curRing!==dev.deviceId){ lastRing=null; qbuf=''; }
+    curRing=dev.deviceId;
+    rings[curRing]=rings[curRing]||{name:dev.name||'Bague'};
+    if(rings[curRing].last==null && savedRing!==null && Object.keys(rings).length===1){ rings[curRing].last=savedRing; store.set('lastRing',null); }
+    savedRing = rings[curRing].last!=null ? rings[curRing].last : null;
+    saveRings(); renderRings();
+  }
+  // ----- Sélecteur de bague -----
+  let found={};
+  function drawPick(){
+    const ids=Object.keys(found).sort((a,b)=>(!!rings[b])-(!!rings[a]) || found[b].rssi-found[a].rssi);
+    $('pickList').innerHTML = ids.length ? '' : '<div class="empty">Aucune bague trouvée pour l\'instant…</div>';
+    ids.forEach(id=>{
+      const f=found[id], known=rings[id]&&rings[id].nick;
+      const bars = f.rssi>-60?'▂▄▆█':f.rssi>-75?'▂▄▆':f.rssi>-88?'▂▄':'▂';
+      const d=document.createElement('div'); d.className='zi';
+      d.innerHTML='<button class="zt"><div class="zn" dir="auto">'+esc(ringLabel(id,f.name))+(known?'':'<span class="tag">nouvelle</span>')+'</div><div class="zs">'+esc(f.name||'Appareil')+' · '+shortId(id)+'</div></button><span class="sig">'+bars+'</span>';
+      d.querySelector('.zt').onclick=()=>pickRing(id,f.name);
+      $('pickList').appendChild(d);
+    });
+  }
+  async function openPicker(){
+    found={}; drawPick(); $('pickM').classList.add('show'); $('pickState').textContent='Recherche…';
+    try{ await NAT.scan(r=>{ if(!r.name && !rings[r.id]) return; if(!/zikr|ring|qibla|tasb/i.test(r.name||'') && !rings[r.id]) return; found[r.id]=r; drawPick(); }, 10000);
+      setTimeout(()=>$('pickState').textContent='', 10000); }
+    catch(e){ $('pickState').textContent='Erreur'; log('Recherche impossible : '+(e.message||e)); }
+  }
+  $('pickCancel').onclick=()=>{ NAT && NAT.stopScan(); $('pickM').classList.remove('show'); };
+  $('pickAgain').onclick=()=>{ NAT && NAT.stopScan(); openPicker(); };
+  async function pickRing(id,name){
+    $('pickM').classList.remove('show');
+    const dev={deviceId:id,name}; useRing(dev);
+    setStatus(false,'Connexion…'); busy=true;
+    try{ natDev = await NAT.connectId(id, name, onPacket, natDisc, log); busy=false; afterConnect(natDev); }
+    catch(e){ busy=false; log('Erreur : '+(e.message||e)); setStatus(false,'Échec connexion'); }
+  }
+  // ----- Nommer une bague -----
+  let nameFor=null;
+  function askName(dev){ nameFor=dev.deviceId; $('nameInfo').textContent=(dev.name||'Bague')+' · '+shortId(dev.deviceId); $('ringName').value=(rings[nameFor]&&rings[nameFor].nick)||''; $('nameM').classList.add('show'); }
+  $('nameCancel').onclick=()=>$('nameM').classList.remove('show');
+  $('nameOk').onclick=()=>{ const n=$('ringName').value.trim(); if(nameFor && n){ rings[nameFor]=rings[nameFor]||{}; rings[nameFor].nick=n; saveRings(); renderRings(); if(nameFor===curRing && connected) setStatus(true,n); }
+    $('nameM').classList.remove('show'); };
+  // ----- Liste « Mes bagues » -----
+  let forgetArm=null;
+  function renderRings(){
+    const box=$('ringList'), ids=Object.keys(rings);
+    box.innerHTML = ids.length ? '' : '<div class="empty">Aucune bague enregistrée. Connectez une bague pour lui donner un nom.</div>';
+    ids.forEach(id=>{
+      const r=rings[id]; const d=document.createElement('div'); d.className='zi'+(id===curRing&&connected?' act':'');
+      d.innerHTML='<button class="zt"><div class="zn" dir="auto">'+esc(ringLabel(id,r.name))+'</div><div class="zs">'+esc(r.name||'Bague')+' · '+shortId(id)+(r.last!=null?' · compteur '+r.last:'')+'</div></button><button class="zd">'+(forgetArm===id?'Oublier ?':'🗑')+'</button>';
+      d.querySelector('.zt').onclick=()=>askName({deviceId:id,name:r.name});
+      d.querySelector('.zd').onclick=()=>{ if(forgetArm!==id){ forgetArm=id; renderRings(); setTimeout(()=>{ if(forgetArm===id){ forgetArm=null; renderRings(); } },3000); return; }
+        forgetArm=null; delete rings[id]; saveRings(); renderRings(); };
+      box.appendChild(d);
+    });
+  }
+  renderRings();
   async function connect(){
     if(NAT){
-      if(connected && natDev){ wantConn=false; clearTimeout(retryT); await NAT.disconnect(natDev); connected=false; setStatus(false,'Bague déconnectée'); $('connect').textContent='Connecter la bague'; return; }
-      try{ setStatus(false,'Recherche…'); busy=true; natDev = await NAT.connect(onPacket, natDisc, log); busy=false; wantConn=true; connected=true; connAt=Date.now(); tries=0; setStatus(true, natDev.name||'Connectée'); $('connect').textContent='Déconnecter la bague'; }
+      if(connected && natDev){ wantConn=false; clearTimeout(retryT); await NAT.disconnect(natDev); connected=false; setStatus(false,'Bague déconnectée'); $('connect').textContent='Connecter la bague'; renderRings(); return; }
+      if(NAT.scan) { openPicker(); return; }
+      try{ setStatus(false,'Recherche…'); busy=true; natDev = await NAT.connect(onPacket, natDisc, log); busy=false; afterConnect(natDev); }
       catch(e){ busy=false; log('Erreur : '+(e.message||e)); setStatus(false,'Échec connexion'); }
-      try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){}
       return;
     }
     if(!navigator.bluetooth){ log('Web Bluetooth indisponible : Bluetooth non disponible.'); setStatus(false,'Bluetooth indisponible'); $('diag').open=true; return; }

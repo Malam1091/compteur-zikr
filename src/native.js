@@ -40,7 +40,28 @@ window.ZikrNative = {
     } catch (e) { return false; }
   },
 
-  // Bague Bluetooth
+  // Recherche des bagues à proximité (liste personnalisée avec les noms donnés)
+  async scan(onFound, ms) {
+    await BleClient.initialize({ androidNeverForLocation: false });
+    try { await BleClient.stopLEScan(); } catch (e) {}
+    await BleClient.requestLEScan({ allowDuplicates: false }, r => {
+      const name = (r.device && r.device.name) || r.localName || '';
+      onFound({ id: r.device.deviceId, name, rssi: r.rssi });
+    });
+    this._scanT = setTimeout(() => this.stopScan(), ms || 8000);
+  },
+  async stopScan() { clearTimeout(this._scanT); try { await BleClient.stopLEScan(); } catch (e) {} },
+  async connectId(id, name, onPacket, onDisconnect, log) {
+    await this.stopScan();
+    const dev = { deviceId: id, name };
+    log('Connexion à ' + (name || id));
+    await BleClient.connect(id, () => { this.stopKeepAlive(); onDisconnect(dev); }, { timeout: 10000 });
+    await this.fast(dev, log);
+    await this.subscribe(dev, onPacket, log);
+    this.startKeepAlive(dev, log);
+    return dev;
+  },
+  // Bague Bluetooth (sélecteur Android)
   async connect(onPacket, onDisconnect, log) {
     await BleClient.initialize({ androidNeverForLocation: false });
     const dev = await BleClient.requestDevice({});
