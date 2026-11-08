@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Compteur Zikr</string>
-    <string name="title_activity_main">Compteur Zikr</string>
+    <string name="app_name">Tasbih</string>
+    <string name="title_activity_main">Tasbih</string>
     <string name="package_name">com.zikr.compteur</string>
     <string name="custom_url_scheme">com.zikr.compteur</string>
 </resources>

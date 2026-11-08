@@ -1,6 +1,6 @@
 {
   "appId": "com.zikr.compteur",
-  "appName": "Compteur Zikr",
+  "appName": "Tasbih",
   "webDir": "www",
   "android": { "backgroundColor": "#0f1513" }
 }

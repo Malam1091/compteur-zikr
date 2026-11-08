@@ -34,17 +34,17 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
-          cp app/build/outputs/apk/debug/app-debug.apk ../CompteurZikr.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../Tasbih.apk
 
       - name: Garder l'APK (onglet Actions)
         uses: actions/upload-artifact@v4
         with:
-          name: CompteurZikr
-          path: CompteurZikr.apk
+          name: Tasbih
+          path: Tasbih.apk
 
       - name: Publier l'APK (onglet Releases)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: Compteur Zikr ${{ github.run_number }}
-          files: CompteurZikr.apk
+          name: Tasbih ${{ github.run_number }}
+          files: Tasbih.apk

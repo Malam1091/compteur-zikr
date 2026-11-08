@@ -2,124 +2,210 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0f1513">
-<title>Compteur Zikr</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tasbih</title>
 <link rel="icon" href="icon-192.png">
 <style>
-  :root{--bg:#0f1513;--card:#18211e;--gold:#d4a84b;--gold2:#f0cf7f;--txt:#eef2ef;--mut:#8fa39b;--ok:#4fbf8a;--err:#e06a5a}
+  :root{--bg:#0f1513;--card:#18211e;--deep:#0b100e;--line:#26302c;--gold:#d4a84b;--gold2:#f0cf7f;--ink:#1a1405;--txt:#eef2ef;--mut:#8fa39b;--ok:#4fbf8a;--red:#3a2420;--redt:#f3b3a8}
+  body[data-theme="nuit"]{--bg:#0d1220;--card:#161d30;--deep:#0a0e19;--line:#242d45;--gold:#6ea8ff;--gold2:#a9cbff;--ink:#07142a;--mut:#8b97b3}
+  body[data-theme="sable"]{--bg:#1c1610;--card:#2a2118;--deep:#15100b;--line:#3a2e22;--gold:#e0a35a;--gold2:#f5c98f;--ink:#2a1606;--mut:#b09c86}
+  body[data-theme="rose"]{--bg:#1a1015;--card:#271820;--deep:#130b0f;--line:#3a2430;--gold:#e58aa8;--gold2:#f6b9cd;--ink:#2a0816;--mut:#b4919f}
+  body[data-theme="clair"]{--bg:#f4f1ea;--card:#ffffff;--deep:#ece7dc;--line:#e2dccf;--gold:#0f7a5a;--gold2:#0f7a5a;--ink:#ffffff;--txt:#1d2421;--mut:#6c7a73;--red:#fbe3de;--redt:#a0392a}
   *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);-webkit-tap-highlight-color:transparent}
-  main{max-width:480px;margin:0 auto;padding:16px 16px 40px}
-  h1{font-size:18px;font-weight:600;margin:4px 0 12px;display:flex;justify-content:space-between;align-items:center}
-  .status{font-size:12px;padding:4px 10px;border-radius:99px;background:#26302c;color:var(--mut)}
+  html,body{height:100%}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);-webkit-tap-highlight-color:transparent;user-select:none}
+  main{max-width:480px;margin:0 auto;padding:14px 16px 90px}
+  h1{font-size:20px;font-weight:700;margin:2px 0 12px;display:flex;justify-content:space-between;align-items:center;color:var(--gold2)}
+  .status{font-size:12px;font-weight:500;padding:4px 10px;border-radius:99px;background:var(--line);color:var(--mut)}
   .status.on{background:#1d3a2c;color:var(--ok)}
   .card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+  .ttl{font-size:15px;font-weight:600;display:block;margin-bottom:10px}
   label{font-size:12px;color:var(--mut);display:block;margin-bottom:6px}
-  input{width:100%;background:#0f1513;border:1px solid #2c3833;color:var(--txt);border-radius:10px;padding:10px;font-size:16px}
-  .row{display:flex;gap:8px}
+  input,select{width:100%;background:var(--deep);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px;font-size:16px;user-select:text}
+  .row{display:flex;gap:8px;align-items:center}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-  .chip{background:#26302c;border:0;color:var(--txt);padding:7px 12px;border-radius:99px;font-size:14px}
-  .chip.sel{background:var(--gold);color:#1a1405;font-weight:600}
+  .chip{background:var(--line);border:0;color:var(--txt);padding:7px 12px;border-radius:99px;font-size:14px}
+  .chip.sel{background:var(--gold);color:var(--ink);font-weight:600}
   button{font:inherit;cursor:pointer}
-  .btn{border:0;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600;background:#26302c;color:var(--txt);flex:1}
-  .btn.gold{background:var(--gold);color:#1a1405}
-  .btn.red{background:#3a2420;color:#f3b3a8}
-  #dial{position:relative;width:260px;height:260px;margin:6px auto 4px;border-radius:50%;border:0;background:none;color:var(--txt);display:block;touch-action:manipulation}
+  .btn{border:0;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600;background:var(--line);color:var(--txt);flex:1}
+  .btn.gold{background:var(--gold);color:var(--ink)}
+  .btn.red{background:var(--red);color:var(--redt)}
+  .btn.on{background:var(--gold);color:var(--ink)}
+  .view{display:none}.view.show{display:block}
+  /* Compteur */
+  #zname{text-align:center;color:var(--gold2);font-size:18px;font-weight:600;margin:2px 0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #dial{position:relative;width:270px;height:270px;margin:4px auto;border-radius:50%;border:0;background:none;color:var(--txt);display:block;touch-action:manipulation}
   #dial svg{position:absolute;inset:0}
   #dial .in{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-  #cur{font-size:72px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+  #cur{font-size:74px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
   #tgtLbl{color:var(--mut);font-size:15px;margin-top:6px}
-  #zname{color:var(--gold2);font-size:15px;margin-bottom:6px;max-width:200px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .stats{display:flex;justify-content:space-around;text-align:center;margin-top:6px}
-  .stats b{display:block;font-size:30px;font-variant-numeric:tabular-nums}
-  .stats span{font-size:12px;color:var(--mut)}
+  #pct{color:var(--gold2);font-size:14px;font-weight:600;margin-top:4px}
   .flash{animation:fl .9s}
-  @keyframes fl{0%{box-shadow:0 0 0 0 rgba(212,168,75,.9)}100%{box-shadow:0 0 0 40px rgba(212,168,75,0)}}
-  .hint{font-size:12px;color:var(--mut);text-align:center;margin:4px 0 10px}
-  details summary{cursor:pointer;color:var(--mut);font-size:14px}
-  #log{font-family:ui-monospace,Menlo,monospace;font-size:11px;white-space:pre-wrap;max-height:220px;overflow:auto;background:#0b100e;border-radius:8px;padding:8px;margin-top:8px;color:#b9c8c1}
-  .small{font-size:12px;color:var(--mut);margin:8px 0}
-  #map{font-size:13px;margin:8px 0}
-  .zi{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#0f1513;margin-top:6px;border:1px solid transparent}
+  @keyframes fl{0%{box-shadow:0 0 0 0 var(--gold)}100%{box-shadow:0 0 0 40px transparent}}
+  .meta{display:flex;justify-content:center;gap:14px;color:var(--mut);font-size:14px;margin:2px 0 8px}
+  #timer{background:none;border:0;color:var(--mut);font-size:14px;padding:0}
+  .stats{display:flex;justify-content:space-around;text-align:center;margin-top:6px}
+  .stats b{display:block;font-size:26px;font-variant-numeric:tabular-nums}
+  .stats span{font-size:12px;color:var(--mut)}
+  .ctl{display:flex;gap:8px;margin:4px 0 12px}
+  .ctl .btn{padding:12px 6px;font-size:14px}
+  #done{display:none;text-align:center;color:var(--gold2);font-weight:700;font-size:17px;margin:2px 0 8px}
+  /* Listes */
+  .zi{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:var(--deep);margin-top:6px;border:1px solid transparent}
   .zi.act{border-color:var(--gold)}
   .zi .zt{flex:1;min-width:0;text-align:left;background:none;border:0;color:var(--txt);padding:0}
-  .zi .zn{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .zi .zs{font-size:12px;color:var(--mut);margin-top:2px}
-  .zi .zd{background:#3a2420;color:#f3b3a8;border:0;border-radius:10px;padding:8px 10px;font-size:13px;white-space:nowrap}
+  .zn{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .zs{font-size:12px;color:var(--mut);margin-top:2px}
+  .zd{background:var(--red);color:var(--redt);border:0;border-radius:10px;padding:8px 10px;font-size:13px;white-space:nowrap}
+  .bar{height:6px;background:var(--line);border-radius:6px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--gold)}
+  .day{padding:10px 0;border-top:1px solid var(--line)}.day:first-child{border-top:0}
+  .day .dh{display:flex;justify-content:space-between;font-weight:600}
+  .day .dl{display:flex;justify-content:space-between;font-size:13px;color:var(--mut);margin-top:4px}
+  /* Réglages */
+  .set{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-top:1px solid var(--line);gap:12px}
+  .set:first-of-type{border-top:0}
+  .set .sl{font-size:15px}.set .sd{font-size:12px;color:var(--mut);margin-top:2px}
+  .sw{position:relative;width:48px;height:28px;flex:0 0 auto}
+  .sw input{opacity:0;width:0;height:0}
+  .sw span{position:absolute;inset:0;background:var(--line);border-radius:99px;transition:.2s}
+  .sw span:before{content:"";position:absolute;width:22px;height:22px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+  .sw input:checked+span{background:var(--gold)}
+  .sw input:checked+span:before{transform:translateX(20px)}
+  .themes{display:flex;gap:10px;flex-wrap:wrap}
+  .th{width:46px;height:46px;border-radius:50%;border:3px solid transparent;padding:0}
+  .th.sel{border-color:var(--txt)}
+  details summary{cursor:pointer;color:var(--mut);font-size:14px}
+  #log{font-family:ui-monospace,Menlo,monospace;font-size:11px;white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--deep);border-radius:8px;padding:8px;margin-top:8px;color:var(--mut);user-select:text}
+  .small{font-size:12px;color:var(--mut);margin:8px 0}
+  #map{font-size:13px;margin:8px 0}
+  /* Barre d'onglets */
+  nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+  nav button{flex:1;background:none;border:0;color:var(--mut);font-size:11px;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:2px}
+  nav button b{font-size:20px;font-weight:400}
+  nav button.sel{color:var(--gold2)}
+  .empty{color:var(--mut);text-align:center;padding:16px 0;font-size:14px}
 </style>
 </head>
-<body>
+<body data-theme="emeraude">
 <main>
-  <h1>Compteur Zikr <span id="status" class="status">Bague non connectée</span></h1>
+  <h1>Tasbih <span id="status" class="status">Bague non connectée</span></h1>
 
-
-  <div class="card">
-    <button id="dial" aria-label="Ajouter 1">
-      <svg viewBox="0 0 260 260"><circle cx="130" cy="130" r="118" fill="none" stroke="#26302c" stroke-width="12"/>
-        <circle id="arc" cx="130" cy="130" r="118" fill="none" stroke="var(--gold)" stroke-width="12" stroke-linecap="round" transform="rotate(-90 130 130)" stroke-dasharray="741.4" stroke-dashoffset="741.4"/></svg>
-      <div class="in"><div id="zname"></div><div id="cur">0</div><div id="tgtLbl">/ 33</div></div>
-    </button>
-    <div class="hint" id="hint">Appuyez sur la bague (ou touchez le cercle) pour compter</div>
-    <div id="done" style="display:none;text-align:center;color:var(--gold2);font-weight:700;font-size:18px;margin:4px 0 10px">✓ Objectif atteint, qu'Allah l'accepte</div>
-    <div class="stats">
-      <div><b id="rounds">0</b><span>Tours terminés</span></div>
-      <div><b id="left">0</b><span>Zikr restants</span></div>
-      <div><b id="total">0</b><span>Total de la séance</span></div>
-    </div>
-  </div>
-
-  <div class="row" style="margin-bottom:12px">
-    <button class="btn gold" id="connect">Connecter la bague</button>
-    <button class="btn red" id="reset">Remettre à zéro</button>
-  </div>
-
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <b style="font-size:15px">Mes zikr</b>
-      <button class="chip" id="newBtn" style="background:var(--gold);color:#1a1405;font-weight:600">+ Nouveau</button>
-    </div>
-    <div id="newForm" style="display:none;background:#0f1513;border-radius:12px;padding:12px;margin-bottom:10px">
-      <label for="nName">Nom du zikr</label>
-      <input id="nName" placeholder="ex. Astaghfirullah">
-      <div class="row" style="margin-top:10px">
-        <div style="flex:1"><label for="nTarget">Objectif par tour</label><input id="nTarget" type="number" min="1" inputmode="numeric" value="452"></div>
-        <div style="flex:1"><label for="nRounds">Nombre de tours</label><input id="nRounds" type="number" min="1" inputmode="numeric" value="1"></div>
-      </div>
-      <div class="row" style="margin-top:12px">
-        <button class="btn" id="nCancel">Annuler</button>
-        <button class="btn gold" id="nCreate">Créer</button>
+  <!-- ===== Compteur ===== -->
+  <section class="view show" id="v-count">
+    <div class="card">
+      <div id="zname"></div>
+      <button id="dial" aria-label="Ajouter 1">
+        <svg viewBox="0 0 270 270"><circle cx="135" cy="135" r="122" fill="none" stroke="var(--line)" stroke-width="12"/>
+          <circle id="arc" cx="135" cy="135" r="122" fill="none" stroke="var(--gold)" stroke-width="12" stroke-linecap="round" transform="rotate(-90 135 135)" stroke-dasharray="766.5" stroke-dashoffset="766.5"/></svg>
+        <div class="in"><div id="cur">0</div><div id="tgtLbl">/ 33</div><div id="pct">0 %</div></div>
+      </button>
+      <div class="meta"><span id="lapLbl">Tour 1 / 1</span><button id="timer">⏱ 00:00</button></div>
+      <div id="done">✓ Objectif atteint, qu'Allah l'accepte</div>
+      <div class="stats">
+        <div><b id="rounds">0</b><span>Tours faits</span></div>
+        <div><b id="left">0</b><span>Restants</span></div>
+        <div><b id="total">0</b><span>Total</span></div>
       </div>
     </div>
-    <div id="zlist"></div>
-  </div>
+    <div class="ctl">
+      <button class="btn" id="minus">− 1</button>
+      <button class="btn" id="auto">▶ Auto</button>
+      <button class="btn red" id="reset">↺ Zéro</button>
+    </div>
+    <button class="btn gold" id="connect" style="width:100%">Connecter la bague</button>
+  </section>
 
-  <div class="card">
-    <b style="font-size:15px;display:block;margin-bottom:10px">Réglages du zikr sélectionné</b>
-    <label for="zikr">Nom</label>
-    <input id="zikr" placeholder="ex. SubhanAllah">
-    <label for="target" style="margin-top:12px">Objectif par tour</label>
-    <input id="target" type="number" min="1" inputmode="numeric" value="33">
-    <div class="chips" id="chips"></div>
-    <label for="goalRounds" style="margin-top:12px">Nombre de tours à faire</label>
-    <input id="goalRounds" type="number" min="1" inputmode="numeric" value="1">
-  </div>
-
-  <div class="card">
-    <details id="diag">
-      <summary>Diagnostic Bluetooth</summary>
-      <div id="map">Compteur de la bague : <b>pas encore détecté</b></div>
-      <p class="small">Après la connexion, appuyez 4 ou 5 fois sur la bague : la page repère seule l'octet qui augmente de 1 à chaque appui.</p>
-      <div class="row">
-        <button class="btn" id="relearn">Réapprendre</button>
-        <button class="btn" id="copy">Copier le journal</button>
+  <!-- ===== Mes zikr ===== -->
+  <section class="view" id="v-list">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <b style="font-size:15px">Mes zikr</b>
+        <button class="chip sel" id="newBtn">+ Nouveau</button>
       </div>
-      <label for="extra" style="margin-top:12px">UUID de service supplémentaire (vu dans nRF Connect)</label>
-      <div class="row"><input id="extra" placeholder="ex. 0000fff0-0000-1000-8000-00805f9b34fb"><button class="btn" id="saveExtra" style="flex:0 0 auto">OK</button></div>
-      <div id="log"></div>
-    </details>
-  </div>
+      <div id="newForm" style="display:none;background:var(--deep);border-radius:12px;padding:12px;margin:6px 0 10px">
+        <label for="nName">Nom du zikr</label>
+        <input id="nName" placeholder="ex. Astaghfirullah">
+        <div class="row" style="margin-top:10px;align-items:flex-start">
+          <div style="flex:1"><label for="nTarget">Objectif par tour</label><input id="nTarget" type="number" min="1" inputmode="numeric" value="33"></div>
+          <div style="flex:1"><label for="nRounds">Nombre de tours</label><input id="nRounds" type="number" min="1" inputmode="numeric" value="1"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="nCancel">Annuler</button>
+          <button class="btn gold" id="nCreate">Créer</button>
+        </div>
+      </div>
+      <div id="zlist"></div>
+    </div>
+    <div class="card">
+      <span class="ttl">Modifier le zikr sélectionné</span>
+      <label for="zikr">Nom</label>
+      <input id="zikr" placeholder="ex. SubhanAllah">
+      <label for="target" style="margin-top:12px">Objectif par tour</label>
+      <input id="target" type="number" min="1" inputmode="numeric" value="33">
+      <div class="chips" id="chips"></div>
+      <label for="goalRounds" style="margin-top:12px">Nombre de tours</label>
+      <input id="goalRounds" type="number" min="1" inputmode="numeric" value="1">
+    </div>
+  </section>
+
+  <!-- ===== Historique ===== -->
+  <section class="view" id="v-hist">
+    <div class="card">
+      <div class="stats" style="margin:0 0 6px">
+        <div><b id="hToday">0</b><span>Aujourd'hui</span></div>
+        <div><b id="h7">0</b><span>7 derniers jours</span></div>
+        <div><b id="hAll">0</b><span>Depuis le début</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <span class="ttl">Par jour</span>
+      <div id="hlist"></div>
+      <button class="btn red" id="hClear" style="width:100%;margin-top:12px">Effacer l'historique</button>
+    </div>
+  </section>
+
+  <!-- ===== Réglages ===== -->
+  <section class="view" id="v-set">
+    <div class="card">
+      <span class="ttl">Thème</span>
+      <div class="themes" id="themes"></div>
+    </div>
+    <div class="card">
+      <span class="ttl">Comptage</span>
+      <div class="set"><div><div class="sl">Boutons de volume</div><div class="sd">Volume + ajoute 1, Volume − retire 1</div></div><label class="sw"><input type="checkbox" id="oVol"><span></span></label></div>
+      <div class="set"><div><div class="sl">Son à chaque compte</div></div><label class="sw"><input type="checkbox" id="oSound"><span></span></label></div>
+      <div class="set"><div><div class="sl">Vibration à chaque compte</div></div><label class="sw"><input type="checkbox" id="oVibC"><span></span></label></div>
+      <div class="set"><div><div class="sl">Vibration à la fin d'un tour</div></div><label class="sw"><input type="checkbox" id="oVibL"><span></span></label></div>
+      <div class="set"><div><div class="sl">Comptage automatique</div><div class="sd">Un compte toutes les … secondes</div></div><input id="oAuto" type="number" min="0.5" step="0.5" inputmode="decimal" style="width:80px"></div>
+    </div>
+    <div class="card">
+      <span class="ttl">Rappels quotidiens</span>
+      <div class="row"><input id="rTime" type="time" value="07:00"><button class="btn gold" id="rAdd" style="flex:0 0 auto">Ajouter</button></div>
+      <div id="rList"></div>
+      <div class="small" id="rMsg"></div>
+    </div>
+    <div class="card">
+      <details id="diag">
+        <summary>Bague Bluetooth — diagnostic</summary>
+        <div id="map">Compteur de la bague : <b>pas encore détecté</b></div>
+        <p class="small">Après la connexion, appuyez 4 ou 5 fois sur la bague : l'application repère seule le compteur.</p>
+        <div class="row">
+          <button class="btn" id="relearn">Réapprendre</button>
+          <button class="btn" id="copy">Copier le journal</button>
+        </div>
+        <div style="display:none"><input id="extra"><button id="saveExtra"></button></div>
+        <div id="log"></div>
+      </details>
+    </div>
+  </section>
 </main>
+
+<nav>
+  <button data-v="count" class="sel"><b>📿</b>Compteur</button>
+  <button data-v="list"><b>☰</b>Mes zikr</button>
+  <button data-v="hist"><b>📊</b>Historique</button>
+  <button data-v="set"><b>⚙</b>Réglages</button>
+</nav>
 
 <script src="native.js"></script>
 <script>
@@ -129,34 +215,90 @@
     get(k,d){ try{ const v = localStorage.getItem('zikr_'+k); return v===null?d:JSON.parse(v);}catch(e){return d;} },
     set(k,v){ try{ localStorage.setItem('zikr_'+k, JSON.stringify(v)); }catch(e){} }
   };
+  const NAT = window.ZikrNative && window.ZikrNative.isNative ? window.ZikrNative : null;
+  const esc = t => String(t).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const fmtN = n => n.toLocaleString('fr-FR');
 
-  // ---------- Plusieurs zikr ----------
+  // ---------- Onglets ----------
+  document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.toggle('sel', x===b));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('show', v.id==='v-'+b.dataset.v));
+    if(b.dataset.v==='hist') renderHist();
+    window.scrollTo(0,0);
+  });
+
+  // ---------- Réglages ----------
+  const opt = Object.assign({theme:'emeraude', vol:true, sound:false, vibC:false, vibL:true, autoSec:2, reminders:[]}, store.get('opt', {}));
+  const saveOpt = () => store.set('opt', opt);
+  const THEMES = [['emeraude','#0f1513','#d4a84b'],['nuit','#0d1220','#6ea8ff'],['sable','#1c1610','#e0a35a'],['rose','#1a1015','#e58aa8'],['clair','#f4f1ea','#0f7a5a']];
+  function renderThemes(){
+    document.body.dataset.theme = opt.theme;
+    $('themes').innerHTML = '';
+    THEMES.forEach(([k,bg,ac])=>{
+      const b=document.createElement('button'); b.className='th'+(opt.theme===k?' sel':''); b.title=k;
+      b.style.background='linear-gradient(135deg,'+bg+' 50%,'+ac+' 50%)';
+      b.onclick=()=>{ opt.theme=k; saveOpt(); renderThemes(); };
+      $('themes').appendChild(b);
+    });
+  }
+  renderThemes();
+  $('oVol').checked=opt.vol; $('oSound').checked=opt.sound; $('oVibC').checked=opt.vibC; $('oVibL').checked=opt.vibL; $('oAuto').value=opt.autoSec;
+  $('oVol').onchange=e=>{ opt.vol=e.target.checked; saveOpt(); applyVol(); };
+  $('oSound').onchange=e=>{ opt.sound=e.target.checked; saveOpt(); };
+  $('oVibC').onchange=e=>{ opt.vibC=e.target.checked; saveOpt(); };
+  $('oVibL').onchange=e=>{ opt.vibL=e.target.checked; saveOpt(); };
+  $('oAuto').onchange=e=>{ opt.autoSec=Math.max(0.5, parseFloat(e.target.value)||2); e.target.value=opt.autoSec; saveOpt(); if(autoT){ stopAuto(); startAuto(); } };
+
+  // ---------- Son et vibration ----------
+  let actx=null;
+  function beep(freq, dur){
+    try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+      const o=actx.createOscillator(), g=actx.createGain(); o.frequency.value=freq; o.connect(g); g.connect(actx.destination);
+      g.gain.setValueAtTime(0.25, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+dur);
+      o.start(); o.stop(actx.currentTime+dur); }catch(e){}
+  }
+  function vib(ms){ if(NAT) NAT.vibrate(ms); else try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} }
+  function feedback(kind){ // 'count' | 'lap' | 'done'
+    if(kind==='count'){ if(opt.sound) beep(880,0.05); if(opt.vibC) vib(35); return; }
+    if(opt.sound){ beep(660,0.15); setTimeout(()=>beep(990,0.2),170); if(kind==='done') setTimeout(()=>beep(1320,0.35),400); }
+    if(opt.vibL){ if(kind==='done'){ vib(900); setTimeout(()=>vib(900),1200); } else vib(350); }
+  }
+
+  // ---------- Données ----------
   const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-  const mk = (name,target,goalRounds) => ({id:uid(), name:name||'Zikr', target:target||33, goalRounds:goalRounds||1, total:0, cur:0, rounds:0});
+  const mk = (name,target,goalRounds) => ({id:uid(), name:name||'Zikr', target:target||33, goalRounds:goalRounds||1, total:0, cur:0, rounds:0, secs:0});
   let db = store.get('db', null);
   if(!db || !Array.isArray(db.zikrs)){
-    const old = store.get('state', null);          // reprise de l'ancienne version
-    const z = mk(old&&old.name||'Zikr', old&&old.target||452, old&&old.goalRounds||1);
+    const old = store.get('state', null);
+    const z = mk(old&&old.name||'SubhanAllah', old&&old.target||33, old&&old.goalRounds||1);
     if(old){ z.total=old.total||0; z.cur=old.cur||0; z.rounds=old.rounds||0; }
     db = {zikrs:[z], activeId:z.id};
+  }
+  db.zikrs.forEach(z=>{ if(z.secs==null) z.secs=0; });
+  let hist = store.get('hist', {});            // { 'AAAA-MM-JJ': { nomZikr: n } }
+  const dayKey = (d=new Date()) => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  function logHist(name, n){
+    const k=dayKey(); hist[k]=hist[k]||{}; const nm=name||'Zikr';
+    hist[k][nm]=Math.max(0,(hist[k][nm]||0)+n); store.set('hist',hist);
   }
   let st;
   function pick(){ st = db.zikrs.find(z=>z.id===db.activeId) || db.zikrs[0]; db.activeId = st.id; }
   pick();
-  const esc = t => String(t).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  // ---------- Liste des zikr ----------
   let delArm = null;
   function renderList(){
     const box=$('zlist'); box.innerHTML='';
     db.zikrs.forEach(z=>{
-      const fin = z.rounds>=z.goalRounds;
+      const goal=z.target*z.goalRounds, p=Math.min(100,Math.floor(z.total/goal*100));
       const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
-      d.innerHTML='<button class="zt"><div class="zn">'+(fin?'✓ ':'')+esc(z.name||'Zikr')+'</div><div class="zs">'+z.target+' × '+z.goalRounds+' tours · '+Math.min(z.rounds,z.goalRounds)+'/'+z.goalRounds+' faits</div></button>'
+      d.innerHTML='<button class="zt"><div class="zn">'+(z.rounds>=z.goalRounds?'✓ ':'')+esc(z.name||'Zikr')+'</div><div class="zs">'+z.target+' × '+z.goalRounds+' tours · '+fmtN(z.total)+' / '+fmtN(goal)+' ('+p+' %)</div><div class="bar"><i style="width:'+p+'%"></i></div></button>'
         +'<button class="zd">'+(delArm===z.id?'Supprimer ?':'🗑')+'</button>';
-      d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; delArm=null; pick(); render(); window.scrollTo({top:0,behavior:'smooth'}); };
+      d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; delArm=null; pick(); render(); document.querySelector('nav button[data-v="count"]').click(); };
       d.querySelector('.zd').onclick=()=>{
         if(delArm!==z.id){ delArm=z.id; renderList(); setTimeout(()=>{ if(delArm===z.id){ delArm=null; renderList(); } },3000); return; }
         delArm=null; db.zikrs=db.zikrs.filter(x=>x.id!==z.id);
-        if(!db.zikrs.length){ const n=mk('Zikr',33,1); db.zikrs.push(n); }
+        if(!db.zikrs.length) db.zikrs.push(mk('SubhanAllah',33,1));
         pick(); render();
       };
       box.appendChild(d);
@@ -167,22 +309,26 @@
   $('nCreate').onclick=()=>{
     const z=mk($('nName').value.trim()||('Zikr '+(db.zikrs.length+1)), Math.max(1,parseInt($('nTarget').value)||33), Math.max(1,parseInt($('nRounds').value)||1));
     db.zikrs.push(z); db.activeId=z.id; pick();
-    $('nName').value=''; $('newForm').style.display='none'; render(); window.scrollTo({top:0,behavior:'smooth'});
+    $('nName').value=''; $('newForm').style.display='none'; render();
+    document.querySelector('nav button[data-v="count"]').click();
   };
 
-  // ---------- Compteur du zikr sélectionné ----------
-  const C = 741.4;
+  // ---------- Compteur ----------
+  const C = 766.5;
+  const mmss = s => { s=Math.floor(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+':'+String(m).padStart(2,'0'):String(m).padStart(2,'0'))+':'+String(x).padStart(2,'0'); };
   function render(){
+    $('zname').textContent = st.name || '';
     $('cur').textContent = st.cur;
     $('tgtLbl').textContent = '/ ' + st.target;
-    $('rounds').textContent = st.rounds + ' / ' + st.goalRounds;
-    $('left').textContent = Math.max(0, st.target*st.goalRounds - st.total);
-    const fin = st.rounds >= st.goalRounds;
-    $('done').style.display = fin ? 'block' : 'none';
-    $('hint').style.display = fin ? 'none' : 'block';
-    $('total').textContent = st.total;
-    $('zname').textContent = st.name || '';
+    $('pct').textContent = Math.floor(st.cur / st.target * 100) + ' %';
     $('arc').setAttribute('stroke-dashoffset', C * (1 - st.cur / st.target));
+    const fin = st.rounds >= st.goalRounds;
+    $('lapLbl').textContent = fin ? 'Terminé' : 'Tour ' + (st.rounds+1) + ' / ' + st.goalRounds;
+    $('rounds').textContent = st.rounds + ' / ' + st.goalRounds;
+    $('left').textContent = fmtN(Math.max(0, st.target*st.goalRounds - st.total));
+    $('total').textContent = fmtN(st.total);
+    $('done').style.display = fin ? 'block' : 'none';
+    $('timer').textContent = (timerOn?'⏱ ':'⏸ ') + mmss(st.secs);
     if(document.activeElement!==$('goalRounds')) $('goalRounds').value = st.goalRounds;
     if(document.activeElement!==$('target')) $('target').value = st.target;
     if(document.activeElement!==$('zikr')) $('zikr').value = st.name;
@@ -190,21 +336,24 @@
     renderList();
     store.set('db', db);
   }
-  const NAT = window.ZikrNative && window.ZikrNative.isNative ? window.ZikrNative : null;
-  function buzz(fin){
-    if(NAT){ NAT.vibrate(fin?900:300); if(fin) setTimeout(()=>NAT.vibrate(900),1200); return; }
-    try{ navigator.vibrate && navigator.vibrate(fin ? [600,150,600,150,600] : [250,120,250]); }catch(e){}
-  }
   function add(n){
     for(let i=0;i<n;i++){
       st.total++; st.cur++;
       if(st.cur >= st.target){
         st.cur = 0; st.rounds++;
-        const fin = st.rounds === st.goalRounds;
-        buzz(fin);
+        feedback(st.rounds === st.goalRounds ? 'done' : 'lap');
         const d=$('dial'); d.classList.remove('flash'); void d.offsetWidth; d.classList.add('flash');
-      }
+      } else feedback('count');
     }
+    logHist(st.name, n);
+    touchTimer();
+    render();
+  }
+  function sub(){
+    if(st.total<=0) return;
+    st.total--; st.cur--;
+    if(st.cur < 0){ if(st.rounds>0){ st.rounds--; st.cur = st.target-1; } else st.cur = 0; }
+    logHist(st.name, -1);
     render();
   }
   [33,99,100,313,452,1000].forEach(v=>{
@@ -216,11 +365,76 @@
   $('goalRounds').onchange = e => { st.goalRounds = Math.max(1, parseInt(e.target.value)||1); render(); };
   $('zikr').oninput = e => { st.name = e.target.value; render(); };
   $('dial').onclick = () => add(1);
+  $('minus').onclick = sub;
   let resetArm = 0;
   $('reset').onclick = () => {
-    if(Date.now() - resetArm > 3000){ resetArm = Date.now(); $('reset').textContent='Confirmer ?'; setTimeout(()=>$('reset').textContent='Remettre à zéro',3000); return; }
-    st.total=0; st.cur=0; st.rounds=0; resetArm=0; $('reset').textContent='Remettre à zéro'; render();
+    if(Date.now() - resetArm > 3000){ resetArm = Date.now(); $('reset').textContent='Confirmer ?'; setTimeout(()=>$('reset').textContent='↺ Zéro',3000); return; }
+    st.total=0; st.cur=0; st.rounds=0; st.secs=0; resetArm=0; timerOn=false; $('reset').textContent='↺ Zéro'; render();
   };
+
+  // ---------- Minuteur (se met en pause après 1 min sans compter) ----------
+  let timerOn=false, lastCount=0;
+  function touchTimer(){ lastCount=Date.now(); timerOn=true; }
+  $('timer').onclick = () => { timerOn=!timerOn; if(timerOn) lastCount=Date.now(); render(); };
+  setInterval(()=>{
+    if(timerOn && !autoT && Date.now()-lastCount > 60000) timerOn=false;
+    if(timerOn){ st.secs++; $('timer').textContent='⏱ '+mmss(st.secs); if(st.secs%10===0) store.set('db',db); }
+    else $('timer').textContent='⏸ '+mmss(st.secs);
+  },1000);
+
+  // ---------- Comptage automatique ----------
+  let autoT=null;
+  function startAuto(){ autoT=setInterval(()=>add(1), opt.autoSec*1000); $('auto').textContent='⏸ Auto'; $('auto').classList.add('on'); }
+  function stopAuto(){ clearInterval(autoT); autoT=null; $('auto').textContent='▶ Auto'; $('auto').classList.remove('on'); }
+  $('auto').onclick = () => autoT ? stopAuto() : startAuto();
+
+  // ---------- Boutons de volume ----------
+  function applyVol(){ if(NAT && NAT.setVolumeKeys) NAT.setVolumeKeys(opt.vol, d => d>0 ? add(1) : sub()); }
+  applyVol();
+
+  // ---------- Historique ----------
+  function renderHist(){
+    const keys=Object.keys(hist).sort().reverse();
+    const sum = k => Object.values(hist[k]||{}).reduce((a,b)=>a+b,0);
+    const today=dayKey(); let s7=0, all=0;
+    for(let i=0;i<7;i++){ const d=new Date(); d.setDate(d.getDate()-i); s7+=sum(dayKey(d)); }
+    keys.forEach(k=>all+=sum(k));
+    $('hToday').textContent=fmtN(sum(today)); $('h7').textContent=fmtN(s7); $('hAll').textContent=fmtN(all);
+    const box=$('hlist'); box.innerHTML='';
+    if(!keys.length){ box.innerHTML='<div class="empty">Pas encore de zikr enregistré.</div>'; return; }
+    keys.slice(0,60).forEach(k=>{
+      const t=sum(k); if(!t) return;
+      const [y,m,d]=k.split('-'); const lbl = k===today ? "Aujourd'hui" : new Date(+y,+m-1,+d).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+      let h='<div class="day"><div class="dh"><span>'+esc(lbl)+'</span><span>'+fmtN(t)+'</span></div>';
+      Object.entries(hist[k]).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]).forEach(([n,c])=>{ h+='<div class="dl"><span>'+esc(n)+'</span><span>'+fmtN(c)+'</span></div>'; });
+      box.insertAdjacentHTML('beforeend', h+'</div>');
+    });
+  }
+  let hArm=0;
+  $('hClear').onclick=()=>{
+    if(Date.now()-hArm>3000){ hArm=Date.now(); $('hClear').textContent='Confirmer la suppression ?'; setTimeout(()=>$('hClear').textContent="Effacer l'historique",3000); return; }
+    hist={}; store.set('hist',hist); hArm=0; $('hClear').textContent="Effacer l'historique"; renderHist();
+  };
+
+  // ---------- Rappels ----------
+  function renderRem(){
+    const box=$('rList'); box.innerHTML='';
+    opt.reminders.sort().forEach(t=>{
+      const d=document.createElement('div'); d.className='zi';
+      d.innerHTML='<div class="zt"><div class="zn">🔔 '+t+'</div><div class="zs">Tous les jours</div></div><button class="zd">🗑</button>';
+      d.querySelector('.zd').onclick=()=>{ opt.reminders=opt.reminders.filter(x=>x!==t); saveOpt(); syncRem(); };
+      box.appendChild(d);
+    });
+  }
+  async function syncRem(){
+    renderRem();
+    if(!NAT){ $('rMsg').textContent="Les rappels fonctionnent dans l'application Android."; return; }
+    const ok = await NAT.setReminders(opt.reminders, "C'est l'heure de votre zikr 📿");
+    $('rMsg').textContent = ok ? '' : 'Autorisez les notifications pour Tasbih dans les paramètres Android.';
+  }
+  $('rAdd').onclick=()=>{ const t=$('rTime').value; if(t && !opt.reminders.includes(t)){ opt.reminders.push(t); saveOpt(); syncRem(); } };
+  renderRem();
+
   render();
 
   // ---------- Journal ----------
