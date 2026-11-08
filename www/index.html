@@ -503,8 +503,10 @@
   // ---------- Détection automatique du compteur ----------
   // mapping = {key:'charUUID', off, fmt, len, head}
   let mapping = store.get('mapping', null);
+  if(mapping && mapping.key && mapping.key.startsWith('0000d002') && mapping.fmt!=='iqibla') mapping=null; // ancienne détection erronée
   let scores = {}, prev = {}, lastRing = null;
-  function showMap(){ $('map').innerHTML = 'Compteur de la bague : ' + (mapping ? '<b style="color:var(--ok)">détecté</b> ('+mapping.fmt+' à l\'octet '+mapping.off+')' : '<b>pas encore détecté</b> — appuyez plusieurs fois sur la bague'); }
+  function showMap(){ if(mapping && mapping.fmt==='iqibla'){ $('map').innerHTML='Compteur de la bague : <b style="color:var(--ok)">protocole iQIBLA</b> ('+(mapping.field===1?'compteur affiché':'total cumulé')+')'; return; }
+    $('map').innerHTML = 'Compteur de la bague : ' + (mapping ? '<b style="color:var(--ok)">détecté</b> ('+mapping.fmt+' à l\'octet '+mapping.off+')' : '<b>pas encore détecté</b> — appuyez plusieurs fois sur la bague'); }
   showMap();
   $('relearn').onclick = () => { mapping=null; scores={}; prev={}; lastRing=null; store.set('mapping',null); showMap(); log('Apprentissage réinitialisé'); };
 
@@ -538,6 +540,13 @@
   $('calBtn').onclick = () => {
     const want = parseInt($('calVal').value);
     if(isNaN(want)){ $('calMsg').textContent='Tapez le nombre affiché sur la bague.'; return; }
+    if(lastQ){
+      const a=parseInt(lastQ[1],10), z=parseInt(lastQ[lastQ.length-1],10);
+      const field = a===want ? 1 : (z===want ? 'last' : null);
+      if(field){ mapping={fmt:'iqibla', field}; store.set('mapping',mapping); lastRing=want; showMap(); showRing(want);
+        $('calMsg').textContent='✓ Calibré sur le '+(field===1?'compteur affiché':'total cumulé')+' de la bague.'; log('Calibré iQIBLA champ '+field); return; }
+      $('calMsg').textContent='La bague envoie '+a+' et '+z+'. Appuyez une fois sur la bague, tapez le nouveau nombre affiché, puis Calibrer.'; return;
+    }
     const order=['u16le','u16be','u8','u32le','u32be']; const found=[];
     for(const k in lastPk){ const b=lastPk[k];
       for(const f of order) for(let o=0;o<b.length;o++){ if(FMTS[f](b,o)===want) found.push({key:k,off:o,fmt:f,len:b.length,head:b[0]}); }
@@ -550,8 +559,32 @@
     log('Calibré : '+JSON.stringify(mapping)+' candidats='+found.length);
   };
 
+  // ---------- Protocole texte de la bague iQIBLA ----------
+  // Exemple : "Q07,0606,56498151,0,0,0,00000000000000,1393"
+  //   champ 1 = compteur affiché sur la bague, dernier champ = total cumulé.
+  //   "R01" = message périodique de la bague. Un long message peut arriver en plusieurs morceaux.
+  let qbuf='', lastQ=null;
+  const isText = b => b.length>0 && Array.from(b).every(x=>x>=0x20 && x<0x7f);
+  function onIqibla(txt){
+    if(/^[A-Z]\d/.test(txt)) qbuf=txt; else qbuf+=txt;
+    if(qbuf[0]!=='Q') return true;
+    const parts=qbuf.split(',');
+    lastQ=parts;
+    if(!mapping || mapping.fmt!=='iqibla'){ mapping={fmt:'iqibla', field:1}; store.set('mapping',mapping); showMap(); log('✓ Protocole iQIBLA reconnu'); }
+    const f=mapping.field;
+    const complete = f===1 ? parts.length>=3 : (parts.length>=9 && qbuf.length>=43);
+    if(!complete) return true;
+    const v=parseInt(parts[f===1?1:parts.length-1],10);
+    if(!isNaN(v)) onRingValue(v);
+    return true;
+  }
   function onPacket(key, b){
     lastPk[key]=b;
+    if(isText(b)){
+      const txt=String.fromCharCode(...b);
+      if(txt!=='R01') log(key.slice(4,8)+' ← '+txt);
+      if(onIqibla(txt)) return;
+    }
     log(key.slice(4,8)+' ← '+hex(b));
     if(mapping){
       if(mapping.key===key && b.length===mapping.len && b[0]===mapping.head){
