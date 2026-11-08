@@ -18,11 +18,11 @@ android {
     }
     signingConfigs {
         debug {
-            // Clé fixe : permet d'installer les mises à jour par-dessus l'ancienne version
-            storeFile file("zikr.keystore")
-            storePassword "zikr1234"
-            keyAlias "zikr"
-            keyPassword "zikr1234"
+            // Certificat de signature de Malam (propriétaire de l'application Tasbih)
+            storeFile file("tasbih-malam.keystore")
+            storePassword "Malam1091Tasbih"
+            keyAlias "malam"
+            keyPassword "Malam1091Tasbih"
         }
     }
     buildTypes {

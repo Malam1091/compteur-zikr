@@ -27,7 +27,9 @@ jobs:
         run: npm ci
 
       - name: Préparer l'application
-        run: npm run build
+        run: |
+          sed -i "s/__VERSION__/1.${{ github.run_number }}/" www/index.html
+          npm run build
 
       - name: Compiler l'APK
         working-directory: android
@@ -46,5 +48,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: Tasbih ${{ github.run_number }}
+          name: Tasbih 1.${{ github.run_number }}
           files: Tasbih.apk
