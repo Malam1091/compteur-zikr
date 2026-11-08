@@ -101,6 +101,7 @@
         <div class="in"><div id="cur">0</div><div id="tgtLbl">/ 33</div><div id="pct">0 %</div></div>
       </button>
       <div class="meta"><span id="lapLbl">Tour 1 / 1</span><button id="timer">⏱ 00:00</button></div>
+      <div class="meta" id="ringRow" style="display:none;align-items:center"><span>Bague : <b id="ringVal">–</b></span><button class="chip" id="syncBtn">⟳ Synchroniser</button></div>
       <div id="done">✓ Objectif atteint, qu'Allah l'accepte</div>
       <div class="stats">
         <div><b id="rounds">0</b><span>Tours faits</span></div>
@@ -196,10 +197,14 @@
       <details id="diag">
         <summary>Bague Bluetooth — diagnostic</summary>
         <div id="map">Compteur de la bague : <b>pas encore détecté</b></div>
-        <p class="small">Après la connexion, appuyez 4 ou 5 fois sur la bague : l'application repère seule le compteur.</p>
+        <p class="small">Après la connexion, appuyez 4 ou 5 fois sur la bague : l'application repère seule le compteur. Si les chiffres ne correspondent pas, utilisez le calibrage.</p>
+        <label for="calVal">Calibrage : nombre affiché sur la bague</label>
+        <div class="row"><input id="calVal" type="number" inputmode="numeric" placeholder="ex. 27"><button class="btn gold" id="calBtn" style="flex:0 0 auto">Calibrer</button></div>
+        <div class="small" id="calMsg"></div>
         <div class="row">
           <button class="btn" id="relearn">Réapprendre</button>
           <button class="btn" id="copy">Copier le journal</button>
+          <button class="btn" id="shareLog">Partager</button>
         </div>
         <div style="display:none"><input id="extra"><button id="saveExtra"></button></div>
         <div id="log"></div>
@@ -481,10 +486,18 @@
   render();
 
   // ---------- Journal ----------
-  const logLines=[];
-  function log(s){ const t=new Date().toLocaleTimeString(); logLines.push(t+'  '+s); if(logLines.length>400) logLines.shift(); if($('diag').open){ $('log').textContent=logLines.slice(-120).join('\n'); $('log').scrollTop=1e9; } }
+  const logLines=store.get('log',[]);
+  logLines.push('──── démarrage '+new Date().toLocaleString('fr-FR')+' ────');
+  let logDirty=true;
+  function log(s){ const t=new Date().toLocaleTimeString(); logLines.push(t+'  '+s); while(logLines.length>500) logLines.shift(); logDirty=true; if($('diag').open){ $('log').textContent=logLines.slice(-120).join('\n'); $('log').scrollTop=1e9; } }
+  setInterval(()=>{ if(logDirty){ logDirty=false; store.set('log',logLines); } },2000);
+  window.addEventListener('error', e=>log('ERREUR : '+e.message+' (ligne '+e.lineno+')'));
+  window.addEventListener('unhandledrejection', e=>log('ERREUR async : '+((e.reason&&e.reason.message)||e.reason)));
+  document.addEventListener('visibilitychange', ()=>{ log('Application '+(document.visibilityState==='visible'?'au premier plan':'en arrière-plan')); store.set('log',logLines); });
   $('diag').addEventListener('toggle', ()=>{ if($('diag').open){ $('log').textContent=logLines.slice(-120).join('\n'); $('log').scrollTop=1e9; } });
-  $('copy').onclick = async () => { try{ await navigator.clipboard.writeText(logLines.join('\n')); $('copy').textContent='Copié ✓'; }catch(e){ $('copy').textContent='Copie impossible'; } setTimeout(()=>$('copy').textContent='Copier le journal',2000); };
+  const logText = () => 'Tasbih — journal\nMapping : '+JSON.stringify(mapping)+'\n'+logLines.join('\n');
+  $('copy').onclick = async () => { try{ if(NAT) await NAT.copy(logText()); else await navigator.clipboard.writeText(logText()); $('copy').textContent='Copié ✓'; }catch(e){ $('copy').textContent='Copie impossible'; } setTimeout(()=>$('copy').textContent='Copier le journal',2000); };
+  $('shareLog').onclick = async () => { try{ if(NAT) await NAT.share(logText()); else await navigator.clipboard.writeText(logText()); }catch(e){} };
   const hex = b => Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(' ');
 
   // ---------- Détection automatique du compteur ----------
@@ -504,14 +517,41 @@
   };
   function asciiNum(b){ const s=String.fromCharCode(...b); const m=s.match(/(\d{1,5})/); return m?parseInt(m[1]):null; }
 
+  function showRing(v){ $('ringRow').style.display='flex'; $('ringVal').textContent=v; }
   function onRingValue(v){
+    showRing(v);
     if(lastRing === null){ lastRing = v; log('Valeur bague initiale : '+v); return; }
-    if(v > lastRing && v - lastRing < 3000){ add(v - lastRing); }
+    if(v > lastRing && v - lastRing < 3000){ log('Bague '+lastRing+' → '+v+' (+'+(v-lastRing)+')'); add(v - lastRing); }
     else if(v < lastRing){ log('La bague a été remise à zéro ('+lastRing+' → '+v+')'); }
     lastRing = v;
   }
+  // Aligne le zikr sélectionné sur le nombre affiché par la bague
+  $('syncBtn').onclick = () => {
+    if(lastRing===null) return;
+    const diff = lastRing - st.total;
+    st.total = lastRing; st.rounds = Math.floor(st.total/st.target); st.cur = st.total % st.target;
+    if(diff) logHist(st.name, diff);
+    log('Synchronisé sur la bague : '+lastRing); render();
+  };
+  // Calibrage : cherche le nombre affiché sur la bague dans les derniers messages reçus
+  const lastPk = {};
+  $('calBtn').onclick = () => {
+    const want = parseInt($('calVal').value);
+    if(isNaN(want)){ $('calMsg').textContent='Tapez le nombre affiché sur la bague.'; return; }
+    const order=['u16le','u16be','u8','u32le','u32be']; const found=[];
+    for(const k in lastPk){ const b=lastPk[k];
+      for(const f of order) for(let o=0;o<b.length;o++){ if(FMTS[f](b,o)===want) found.push({key:k,off:o,fmt:f,len:b.length,head:b[0]}); }
+      if(asciiNum(b)===want) found.push({key:k,off:0,fmt:'ascii',len:b.length,head:b[0]});
+    }
+    if(!found.length){ $('calMsg').textContent="Nombre introuvable. Appuyez une fois sur la bague, tapez le nouveau nombre affiché, puis Calibrer."; log('Calibrage : '+want+' introuvable'); return; }
+    found.sort((a,b)=>order.indexOf(a.fmt)-order.indexOf(b.fmt));
+    mapping=found[0]; store.set('mapping',mapping); lastRing=want; showMap(); showRing(want);
+    $('calMsg').textContent='✓ Calibré ('+mapping.fmt+', octet '+mapping.off+(found.length>1?', '+found.length+' possibilités':'')+'). Appuyez sur la bague pour vérifier.';
+    log('Calibré : '+JSON.stringify(mapping)+' candidats='+found.length);
+  };
 
   function onPacket(key, b){
+    lastPk[key]=b;
     log(key.slice(4,8)+' ← '+hex(b));
     if(mapping){
       if(mapping.key===key && b.length===mapping.len && b[0]===mapping.head){
@@ -520,8 +560,9 @@
       }
       return;
     }
-    const p = prev[key];
-    if(p && p.length===b.length && p[0]===b[0]){
+    const pk = key+'|'+b.length+'|'+b[0];          // messages du même type uniquement
+    const p = prev[pk];
+    if(p){
       const cands=[];
       for(const f in FMTS) for(let o=0;o<b.length;o++){ const a=FMTS[f](p,o), c=FMTS[f](b,o); if(a!==null && c!==null) cands.push([f,o,a,c]); }
       const aa=asciiNum(p), ab=asciiNum(b); if(aa!==null && ab!==null) cands.push(['ascii',0,aa,ab]);
@@ -529,21 +570,24 @@
         const id=key+'|'+f+'|'+o+'|'+b.length+'|'+b[0];
         if(c===a+1) scores[id]=(scores[id]||0)+1; else if(c!==a) scores[id]=0;
       }
-      const best = Object.entries(scores).filter(([,s])=>s>=3).sort((x,y)=>y[1]-x[1]);
+      const best = Object.entries(scores).filter(([,s])=>s>=3);
       if(best.length){
-        // préférer u8 < u16 < u32 en cas d'égalité (le plus simple)
-        const top=best[0][1]; const ties=best.filter(x=>x[1]===top).map(x=>x[0]);
-        const order=['u8','u16le','u16be','u32le','u32be','ascii'];
-        ties.sort((x,y)=>order.indexOf(x.split('|')[1])-order.indexOf(y.split('|')[1]));
-        const [k,f,o,len,head]=ties[0].split('|');
-        // u8 peut être un débordement d'un u16 ; si u16le à la même position marche aussi, le préférer
-        let fmt=f; if(f==='u8' && scores[k+'|u16le|'+o+'|'+len+'|'+head]===top) fmt='u16le';
-        mapping={key:k, off:+o, fmt, len:+len, head:+head};
-        store.set('mapping',mapping); showMap(); log('✓ Compteur détecté : '+fmt+' octet '+o);
-        const v = fmt==='ascii'?asciiNum(b):FMTS[fmt](b,+o); lastRing=v;
+        const top=Math.max(...best.map(x=>x[1]));
+        const order=['u16le','u16be','u8','u32le','u32be','ascii'];
+        // La bague compte jusqu'à 9999 et son compteur ne repart pas à 0 à chaque connexion,
+        // contrairement à un numéro de message : on préfère la plus grande valeur plausible.
+        const ties=best.filter(x=>x[1]===top).map(([id])=>{ const [k,f,o,len,head]=id.split('|'); return {k,f,o:+o,len:+len,head:+head,v:(f==='ascii'?asciiNum(b):FMTS[f](b,+o))}; })
+          .filter(t=>t.k===key && t.len===b.length && t.head===b[0] && t.v!==null && t.v<=9999);
+        if(ties.length){
+          ties.sort((x,y)=> (y.v-x.v) || (order.indexOf(x.f)-order.indexOf(y.f)));
+          const t=ties[0];
+          mapping={key:t.k, off:t.o, fmt:t.f, len:t.len, head:t.head};
+          store.set('mapping',mapping); showMap(); log('✓ Compteur détecté : '+t.f+' octet '+t.o+' (valeur '+t.v+', '+ties.length+' candidat(s))');
+          lastRing=t.v; showRing(t.v);
+        }
       }
     }
-    prev[key]=b;
+    prev[pk]=b;
   }
 
   // ---------- Bluetooth ----------
@@ -555,8 +599,10 @@
   let device=null;
   function setStatus(on, txt){ $('status').className='status'+(on?' on':''); $('status').textContent=txt; }
 
-  let natDev=null, wantConn=false, connected=false, retryT=null, tries=0;
+  let natDev=null, wantConn=false, connected=false, retryT=null, tries=0, busy=false, connAt=0;
   function natDisc(dev){
+    if(!connected && busy) return;
+    log('Bague déconnectée après '+Math.round((Date.now()-connAt)/1000)+' s');
     connected=false; if(!wantConn) return;
     setStatus(false,'Reconnexion…'); log('Bague déconnectée — reconnexion automatique');
     scheduleRetry(dev);
@@ -565,17 +611,19 @@
     clearTimeout(retryT);
     const wait=Math.min(10000, 1500*Math.pow(1.5,tries));
     retryT=setTimeout(async()=>{
-      if(!wantConn || connected) return;
-      try{ await NAT.reconnect(dev,onPacket,natDisc,log); connected=true; tries=0; setStatus(true,dev.name||'Connectée'); log('Reconnectée ✓'); }
-      catch(e){ tries++; log('Reconnexion échouée ('+tries+') : '+(e.message||e)); setStatus(false,'Reconnexion…'); scheduleRetry(dev); }
+      if(!wantConn || connected || busy) return;
+      busy=true;
+      try{ await NAT.reconnect(dev,onPacket,natDisc,log); connected=true; connAt=Date.now(); tries=0; setStatus(true,dev.name||'Connectée'); log('Reconnectée ✓'); }
+      catch(e){ tries++; log('Reconnexion échouée ('+tries+') : '+(e.message||e)); setStatus(false,'Reconnexion…'); busy=false; scheduleRetry(dev); return; }
+      busy=false;
     }, wait);
   }
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && NAT && natDev && wantConn && !connected){ tries=0; scheduleRetry(natDev); } });
   async function connect(){
     if(NAT){
       if(connected && natDev){ wantConn=false; clearTimeout(retryT); await NAT.disconnect(natDev); connected=false; setStatus(false,'Bague déconnectée'); $('connect').textContent='Connecter la bague'; return; }
-      try{ setStatus(false,'Recherche…'); natDev = await NAT.connect(onPacket, natDisc, log); wantConn=true; connected=true; tries=0; setStatus(true, natDev.name||'Connectée'); $('connect').textContent='Déconnecter la bague'; }
-      catch(e){ log('Erreur : '+(e.message||e)); setStatus(false,'Échec connexion'); $('diag').open=true; }
+      try{ setStatus(false,'Recherche…'); busy=true; natDev = await NAT.connect(onPacket, natDisc, log); busy=false; wantConn=true; connected=true; connAt=Date.now(); tries=0; setStatus(true, natDev.name||'Connectée'); $('connect').textContent='Déconnecter la bague'; }
+      catch(e){ busy=false; log('Erreur : '+(e.message||e)); setStatus(false,'Échec connexion'); }
       try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){}
       return;
     }
@@ -611,6 +659,7 @@
     }catch(e){ log('Erreur GATT : '+e.message); setStatus(false,'Échec connexion'); }
   }
   $('connect').onclick = connect;
+  window.__ring = onPacket; // tests
 
 })();
 </script>
