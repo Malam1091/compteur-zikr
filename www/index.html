@@ -37,6 +37,7 @@
   #zname{text-align:center;color:var(--gold2);font-size:20px;font-weight:600;margin:2px 0 4px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   #zname,.zn,#zikr,#nName,.dl span:first-child,select{font-family:system-ui,"Noto Naskh Arabic","Noto Sans Arabic",Roboto,sans-serif;unicode-bidi:plaintext}
   .ar{font-family:"Noto Naskh Arabic","Noto Sans Arabic",serif;font-size:17px;direction:rtl}
+  #freeChips .chip{padding:6px 9px;font-size:13px;flex:0 0 auto}
   .adh{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
   .adh .chip{padding:6px 12px;line-height:1.6}
   #dial{position:relative;width:270px;height:270px;margin:4px auto;border-radius:50%;border:0;background:none;color:var(--txt);display:block;touch-action:manipulation}
@@ -113,6 +114,7 @@
       <div id="zname" dir="auto"></div>
       <div id="ztr" class="small" style="text-align:center;margin:-2px 0 4px"></div>
       <div style="text-align:center;margin-bottom:2px"><button class="chip" id="swBtn">☰ Changer de zikr ▾</button></div>
+      <div class="chips" id="freeChips" style="justify-content:center;flex-wrap:nowrap;gap:4px;margin:8px 0 6px"></div>
       <button id="dial" aria-label="Ajouter 1">
         <svg viewBox="0 0 270 270"><circle cx="135" cy="135" r="122" fill="none" stroke="var(--line)" stroke-width="12"/>
           <circle id="arc" cx="135" cy="135" r="122" fill="none" stroke="var(--gold)" stroke-width="12" stroke-linecap="round" transform="rotate(-90 135 135)" stroke-dasharray="766.5" stroke-dashoffset="766.5"/></svg>
@@ -437,7 +439,7 @@
     db.zikrs.forEach(z=>{
       if(z.free){
         const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
-        d.innerHTML='<button class="zt"><div class="zn">📿 Compteur libre</div><div class="zs">Sans nom ni objectif · total '+fmtN(z.total)+'</div></button>';
+        d.innerHTML='<button class="zt"><div class="zn">📿 Compteur libre</div><div class="zs">'+(z.target>0?'Objectif '+z.target+' · tour '+(z.rounds+1):'Sans objectif')+' · total '+fmtN(z.total)+'</div></button>';
         d.querySelector('.zt').onclick=()=>selectZikr(z.id);
         box.appendChild(d); return;
       }
@@ -482,7 +484,7 @@
     const box=$('swList'); box.innerHTML='';
     db.zikrs.forEach(z=>{
       const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
-      const info = z.free ? 'Sans nom ni objectif · total '+fmtN(z.total) : z.target+' × '+z.goalRounds+' · tour '+Math.min(z.rounds+1,z.goalRounds)+'/'+z.goalRounds+' · '+z.cur+' / '+z.target;
+      const info = z.free ? (z.target>0?'Objectif '+z.target+' · tour '+(z.rounds+1)+' · '+z.cur+' / '+z.target:'Sans objectif · total '+fmtN(z.total)) : z.target+' × '+z.goalRounds+' · tour '+Math.min(z.rounds+1,z.goalRounds)+'/'+z.goalRounds+' · '+z.cur+' / '+z.target;
       d.innerHTML='<button class="zt"><div class="zn" dir="auto">'+(z.free?'📿 Compteur libre':esc(z.name||'Zikr'))+(z.id===st.id?' <span class="tag">en cours</span>':'')+'</div><div class="zs">'+info+'</div></button>';
       d.querySelector('.zt').onclick=()=>selectZikr(z.id);
       box.appendChild(d);
@@ -511,12 +513,20 @@
   function render(light){
     $('freeNote').style.display = st.free ? 'block' : 'none';
     $('editFields').style.display = st.free ? 'none' : 'block';
+    $('freeChips').style.display = st.free ? 'flex' : 'none';
+    document.querySelectorAll('#freeChips .chip').forEach(c => c.classList.toggle('sel', +c.dataset.v === (st.target||0)));
     if(st.free){
       $('zname').textContent=''; $('ztr').textContent='';
       renderDayGoal(); bgNotify();
-      $('cur').textContent = st.total; $('tgtLbl').textContent='Compteur libre'; $('pct').textContent='';
-      $('arc').setAttribute('stroke-dashoffset', C * (1 - (st.total%100)/100));
-      $('lapLbl').textContent='Sans objectif'; $('rounds').textContent='–'; $('left').textContent='–';
+      if(st.target>0){
+        $('cur').textContent = st.cur; $('tgtLbl').textContent='/ '+st.target+' · compteur libre'; $('pct').textContent=Math.floor(st.cur/st.target*100)+' %';
+        $('arc').setAttribute('stroke-dashoffset', C * (1 - st.cur/st.target));
+        $('lapLbl').textContent='Tour '+(st.rounds+1); $('rounds').textContent=st.rounds; $('left').textContent=fmtN(st.target-st.cur);
+      } else {
+        $('cur').textContent = st.total; $('tgtLbl').textContent='Compteur libre'; $('pct').textContent='';
+        $('arc').setAttribute('stroke-dashoffset', C * (1 - (st.total%100)/100));
+        $('lapLbl').textContent='Sans objectif'; $('rounds').textContent='–'; $('left').textContent='–';
+      }
       $('total').textContent=fmtN(st.total); $('done').style.display='none';
       $('timer').textContent = (timerOn?'⏱ ':'⏸ ') + mmss(st.secs);
       try{ showPending(); }catch(e){}
@@ -549,8 +559,14 @@
     try{ showPending(); }catch(e){}
   }
   function add(n){
-    if(st.free){
+    if(st.free && !(st.target>0)){
       st.total+=n; st.cur=st.total; feedback('count');
+      logHist(zName(st), n); touchTimer(); scheduleRender(); return;
+    }
+    if(st.free){   // compteur libre avec objectif rapide : tours sans limite
+      for(let i=0;i<n;i++){ st.total++; st.cur++;
+        if(st.cur>=st.target){ st.cur=0; st.rounds++; feedback('lap'); const d=$('dial'); d.classList.remove('flash'); void d.offsetWidth; d.classList.add('flash'); }
+        else feedback('count'); }
       logHist(zName(st), n); touchTimer(); scheduleRender(); return;
     }
     for(let i=0;i<n;i++){
@@ -567,13 +583,14 @@
   }
   function sub(){
     if(st.total<=0) return;
-    if(st.free){ st.total--; st.cur=st.total; logHist(zName(st),-1); scheduleRender(); return; }
+    if(st.free && !(st.target>0)){ st.total--; st.cur=st.total; logHist(zName(st),-1); scheduleRender(); return; }
+    if(st.free){ st.total--; st.cur--; if(st.cur<0){ if(st.rounds>0){ st.rounds--; st.cur=st.target-1; } else st.cur=0; } logHist(zName(st),-1); scheduleRender(); return; }
     st.total--; st.cur--;
     if(st.cur < 0){ if(st.rounds>0){ st.rounds--; st.cur = st.target-1; } else st.cur = 0; }
     logHist(zName(st), -1);
     scheduleRender();
   }
-  [33,99,100,313,452,1000].forEach(v=>{
+  [33,99,100,111,452,1000].forEach(v=>{
     const b=document.createElement('button'); b.className='chip'; b.dataset.v=v; b.textContent=v;
     b.onclick=()=>{ if(st.free) return; st.target=v; if(st.cur>=v) st.cur=0; render(); };
     $('chips').appendChild(b);
@@ -586,6 +603,12 @@
   $('lock').onclick = () => { opt.lockDial=!opt.lockDial; saveOpt(); renderLock(); };
   $('oLock').onchange = e => { opt.lockDial=e.target.checked; saveOpt(); renderLock(); };
   $('minus').onclick = sub;
+  // Objectif rapide du compteur libre : ∞ (sans objectif) ou 33, 99, 100, 111, 452, 1000
+  [0,33,99,100,111,452,1000].forEach(v=>{
+    const b=document.createElement('button'); b.className='chip'; b.dataset.v=v; b.textContent = v ? v : '∞';
+    b.onclick=()=>{ const f=db.zikrs.find(z=>z.free); f.target=v; f.cur = v ? 0 : f.total; f.rounds=0; render(); };
+    $('freeChips').appendChild(b);
+  });
   let resetArm = 0;
   $('reset').onclick = () => {
     if(Date.now() - resetArm > 3000){ resetArm = Date.now(); $('reset').textContent='Confirmer ?'; setTimeout(()=>$('reset').textContent='↺ Zéro',3000); return; }
@@ -702,7 +725,7 @@
   $('oBg').checked=opt.bgService; $('oBg').onchange=e=>{ opt.bgService=e.target.checked; saveOpt(); if(!opt.bgService) bgStop(); else if(typeof connected!=='undefined' && connected) bgStart(); };
   let bgT=null;
   const bgTitle = () => st.free ? 'Tasbih — compteur libre' : (st.name||'Tasbih');
-  const bgBody = () => st.free ? 'Total '+fmtN(st.total) : st.cur+' / '+st.target+' · tour '+Math.min(st.rounds+1,st.goalRounds)+'/'+st.goalRounds+' · total '+fmtN(st.total);
+  const bgBody = () => st.free ? (st.target>0 ? st.cur+' / '+st.target+' · tour '+(st.rounds+1)+' · total '+fmtN(st.total) : 'Total '+fmtN(st.total)) : st.cur+' / '+st.target+' · tour '+Math.min(st.rounds+1,st.goalRounds)+'/'+st.goalRounds+' · total '+fmtN(st.total);
   function bgStart(){ if(NAT && NAT.startBg && opt.bgService) NAT.startBg(bgTitle(), bgBody(), ()=>{ $('connect').click(); }); }
   function bgStop(){ if(NAT && NAT.stopBg) NAT.stopBg(); }
   function bgNotify(){ if(!NAT || !NAT.updateBg || bgT) return; bgT=setTimeout(()=>{ bgT=null; NAT.updateBg(bgTitle(), bgBody()); },700); }
