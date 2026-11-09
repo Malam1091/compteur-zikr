@@ -112,6 +112,7 @@
       </div>
       <div id="zname" dir="auto"></div>
       <div id="ztr" class="small" style="text-align:center;margin:-2px 0 4px"></div>
+      <div style="text-align:center;margin-bottom:2px"><button class="chip" id="swBtn">☰ Changer de zikr ▾</button></div>
       <button id="dial" aria-label="Ajouter 1">
         <svg viewBox="0 0 270 270"><circle cx="135" cy="135" r="122" fill="none" stroke="var(--line)" stroke-width="12"/>
           <circle id="arc" cx="135" cy="135" r="122" fill="none" stroke="var(--gold)" stroke-width="12" stroke-linecap="round" transform="rotate(-90 135 135)" stroke-dasharray="766.5" stroke-dashoffset="766.5"/></svg>
@@ -306,6 +307,11 @@
   <div id="pickList"></div>
   <div class="row" style="margin-top:12px"><button class="btn" id="pickCancel">Annuler</button><button class="btn" id="pickAgain">Rechercher</button></div>
 </div></div>
+<div class="modal" id="swM"><div class="sheet">
+  <div class="row" style="justify-content:space-between;margin-bottom:6px"><b style="font-size:16px">Choisir un zikr</b><button class="chip" id="swNew">+ Nouveau</button></div>
+  <div id="swList"></div>
+  <button class="btn" id="swClose" style="width:100%;margin-top:12px">Fermer</button>
+</div></div>
 <div class="modal" id="nameM"><div class="sheet">
   <b style="font-size:16px;display:block;margin-bottom:6px">Nom de la bague</b>
   <div class="small" style="margin-top:0" id="nameInfo"></div>
@@ -432,14 +438,14 @@
       if(z.free){
         const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
         d.innerHTML='<button class="zt"><div class="zn">📿 Compteur libre</div><div class="zs">Sans nom ni objectif · total '+fmtN(z.total)+'</div></button>';
-        d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; pick(); render(); document.querySelector('nav button[data-v="count"]').click(); };
+        d.querySelector('.zt').onclick=()=>selectZikr(z.id);
         box.appendChild(d); return;
       }
       const goal=z.target*z.goalRounds, p=Math.min(100,Math.floor(z.total/goal*100));
       const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
       d.innerHTML='<button class="zt"><div class="zn" dir="auto">'+(z.rounds>=z.goalRounds?'✓ ':'')+esc(z.name||'Zikr')+'</div><div class="zs">'+z.target+' × '+z.goalRounds+' tours · '+fmtN(z.total)+' / '+fmtN(goal)+' ('+p+' %)</div><div class="bar"><i style="width:'+p+'%"></i></div></button>'
         +'<button class="zd">'+(delArm===z.id?'Supprimer ?':'🗑')+'</button>';
-      d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; delArm=null; pick(); render(); document.querySelector('nav button[data-v="count"]').click(); };
+      d.querySelector('.zt').onclick=()=>selectZikr(z.id);
       d.querySelector('.zd').onclick=()=>{
         if(delArm!==z.id){ delArm=z.id; renderList(); setTimeout(()=>{ if(delArm===z.id){ delArm=null; renderList(); } },3000); return; }
         delArm=null; db.zikrs=db.zikrs.filter(x=>x.id!==z.id);
@@ -470,6 +476,24 @@
   }
   fillAdh('adhN', (t,n)=>{ $('nName').value=t; $('nTarget').value=n; });
   fillAdh('adhE', (t)=>{ if(st.free) return; st.name=t; render(); });
+  // ----- Changement rapide de zikr (depuis l'écran Compteur) -----
+  function selectZikr(id){ db.activeId=id; delArm=null; pick(); render(); $('swM').classList.remove('show'); document.querySelector('nav button[data-v="count"]').click(); }
+  function openSwitch(){
+    const box=$('swList'); box.innerHTML='';
+    db.zikrs.forEach(z=>{
+      const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
+      const info = z.free ? 'Sans nom ni objectif · total '+fmtN(z.total) : z.target+' × '+z.goalRounds+' · tour '+Math.min(z.rounds+1,z.goalRounds)+'/'+z.goalRounds+' · '+z.cur+' / '+z.target;
+      d.innerHTML='<button class="zt"><div class="zn" dir="auto">'+(z.free?'📿 Compteur libre':esc(z.name||'Zikr'))+(z.id===st.id?' <span class="tag">en cours</span>':'')+'</div><div class="zs">'+info+'</div></button>';
+      d.querySelector('.zt').onclick=()=>selectZikr(z.id);
+      box.appendChild(d);
+    });
+    $('swM').classList.add('show');
+  }
+  $('swBtn').onclick=openSwitch;
+  $('zname').onclick=openSwitch;
+  $('swClose').onclick=()=>$('swM').classList.remove('show');
+  $('swM').onclick=e=>{ if(e.target.id==='swM') $('swM').classList.remove('show'); };
+  $('swNew').onclick=()=>{ $('swM').classList.remove('show'); document.querySelector('nav button[data-v="list"]').click(); $('newForm').style.display='block'; $('nName').focus(); };
   $('newBtn').onclick=()=>{ const f=$('newForm'); f.style.display=f.style.display==='none'?'block':'none'; if(f.style.display==='block') $('nName').focus(); };
   $('nCancel').onclick=()=>{ $('newForm').style.display='none'; };
   $('nCreate').onclick=()=>{
