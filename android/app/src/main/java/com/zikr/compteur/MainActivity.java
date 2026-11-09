@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(VolumeKeysPlugin.class);
+        registerPlugin(TasbihWidgetPlugin.class);
         super.onCreate(savedInstanceState);
         // Garde l'écran allumé pendant le zikr
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);

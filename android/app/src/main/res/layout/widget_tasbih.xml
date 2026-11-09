@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@drawable/widget_bg" android:orientation="horizontal"
+    android:gravity="center_vertical" android:padding="12dp">
+    <LinearLayout android:id="@+id/w_info" android:layout_width="0dp" android:layout_height="match_parent"
+        android:layout_weight="1" android:orientation="vertical" android:gravity="center_vertical">
+        <TextView android:id="@+id/w_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Compteur libre" android:textColor="#F0CF7F" android:textSize="14sp" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/w_count" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="0" android:textColor="#FFFFFF" android:textSize="34sp" android:textStyle="bold" />
+        <TextView android:id="@+id/w_sub" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="total 0" android:textColor="#CFE3DA" android:textSize="12sp" android:maxLines="1" />
+    </LinearLayout>
+    <TextView android:id="@+id/w_plus" android:layout_width="64dp" android:layout_height="64dp"
+        android:background="@drawable/widget_btn" android:gravity="center" android:text="+1"
+        android:textColor="#1A1405" android:textSize="22sp" android:textStyle="bold" />
+</LinearLayout>

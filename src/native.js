@@ -20,10 +20,15 @@ window.ZikrPrayer = {
 };
 
 const VolumeKeys = registerPlugin('VolumeKeys');
+const TasbihWidget = registerPlugin('TasbihWidget');
 const hex = v => Array.from(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)).map(x => x.toString(16).padStart(2, '0')).join(' ');
 
 window.ZikrNative = {
   isNative: Capacitor.isNativePlatform(),
+  // ---- Widget d'écran d'accueil ----
+  async widgetUpdate(d) { try { await TasbihWidget.update(d); } catch (e) {} },
+  async widgetTake() { try { return (await TasbihWidget.take()).taps || 0; } catch (e) { return 0; } },
+
   // ---- Service au premier plan (écran éteint) ----
   _bgOn: false,
   async startBg(title, body, onStop) {
@@ -112,15 +117,44 @@ window.ZikrNative = {
     this._scanT = setTimeout(() => this.stopScan(), ms || 8000);
   },
   async stopScan() { clearTimeout(this._scanT); try { await BleClient.stopLEScan(); } catch (e) {} },
+  // Ferme une ancienne liaison restée ouverte (évite l'erreur Android 133 à la reconnexion)
+  async cleanup(id) { this.stopKeepAlive(); try { await BleClient.disconnect(id); } catch (e) {} },
+  // Attend que la bague soit visible (elle se réveille quand on appuie dessus)
+  async waitSeen(id, ms, log, name) {
+    await BleClient.initialize({ androidNeverForLocation: false });
+    try { await BleClient.stopLEScan(); } catch (e) {}
+    return new Promise(async (resolve) => {
+      let done = false;
+      const finish = async ok => { if (done) return; done = true; clearTimeout(t); try { await BleClient.stopLEScan(); } catch (e) {} resolve(ok); };
+      const t = setTimeout(() => finish(false), ms);
+      try { await BleClient.requestLEScan(name ? { name, allowDuplicates: true } : { allowDuplicates: true }, r => { if (r.device && r.device.deviceId === id) finish(true); }); }
+      catch (e) { log && log('Recherche impossible : ' + e.message); finish(false); }
+    });
+  },
+  async link(dev, onPacket, onDisconnect, log) {
+    let last;
+    for (let i = 0; i < 3; i++) {
+      try {
+        await BleClient.connect(dev.deviceId, () => { this.stopKeepAlive(); onDisconnect(dev); }, { timeout: 10000 });
+        await this.fast(dev, log);
+        await this.subscribe(dev, onPacket, log);
+        if (this.keepAlive) this.startKeepAlive(dev, log);
+        return dev;
+      } catch (e) {
+        last = e; log('Tentative ' + (i + 1) + ' échouée : ' + (e.message || e));
+        await this.cleanup(dev.deviceId);
+        await new Promise(r => setTimeout(r, 700));
+      }
+    }
+    throw last;
+  },
+  keepAlive: false,
   async connectId(id, name, onPacket, onDisconnect, log) {
     await this.stopScan();
     const dev = { deviceId: id, name };
     log('Connexion à ' + (name || id));
-    await BleClient.connect(id, () => { this.stopKeepAlive(); onDisconnect(dev); }, { timeout: 10000 });
-    await this.fast(dev, log);
-    await this.subscribe(dev, onPacket, log);
-    this.startKeepAlive(dev, log);
-    return dev;
+    await this.cleanup(id);
+    return this.link(dev, onPacket, onDisconnect, log);
   },
   // Bague Bluetooth (sélecteur Android)
   async connect(onPacket, onDisconnect, log) {
@@ -130,14 +164,15 @@ window.ZikrNative = {
     await BleClient.connect(dev.deviceId, () => { this.stopKeepAlive(); onDisconnect(dev); });
     await this.fast(dev, log);
     await this.subscribe(dev, onPacket, log);
-    this.startKeepAlive(dev, log);
+    if (this.keepAlive) this.startKeepAlive(dev, log);
     return dev;
   },
   async reconnect(dev, onPacket, onDisconnect, log) {
-    await BleClient.connect(dev.deviceId, () => { this.stopKeepAlive(); onDisconnect(dev); }, { timeout: 8000 });
-    await this.fast(dev, log);
-    await this.subscribe(dev, onPacket, log);
-    this.startKeepAlive(dev, log);
+    await this.cleanup(dev.deviceId);
+    const seen = await this.waitSeen(dev.deviceId, 15000, log, dev.name);  // filtre par nom : la recherche marche aussi écran éteint
+    if (!seen) throw new Error('bague pas visible (appuyez sur la bague pour la réveiller)');
+    log('Bague visible, connexion…');
+    await this.link(dev, onPacket, onDisconnect, log);
   },
   // Liaison rapide : réduit la latence entre la bague et l'application
   async fast(dev, log) {

@@ -138,6 +138,7 @@
       <button class="btn" id="auto">▶ Auto</button>
       <button class="btn red" id="reset">↺ Zéro</button>
       <button class="btn" id="lock" style="flex:0 0 52px" title="Verrouiller le cercle">🔓</button>
+      <button class="btn" id="blackBtn" style="flex:0 0 52px" title="Écran noir">🌑</button>
     </div>
   </section>
 
@@ -230,6 +231,7 @@
       <span class="ttl">Objectif du jour</span>
       <div class="set"><div><div class="sl">Zikr par jour (tous zikr confondus)</div><div class="sd">0 = pas d'objectif</div></div><input id="oDay" type="number" min="0" step="100" inputmode="numeric" style="width:100px"></div>
       <div class="set"><div><div class="sl">Verrouiller le cercle</div><div class="sd">Évite de compter en touchant l'écran par accident</div></div><label class="sw"><input type="checkbox" id="oLock"><span></span></label></div>
+      <div class="set"><div><div class="sl">Écran noir : afficher le compteur</div><div class="sd">Chiffre très discret sur fond noir (sinon écran entièrement noir)</div></div><label class="sw"><input type="checkbox" id="oBlackNum"><span></span></label></div>
       <div class="set"><div><div class="sl">Afficher la traduction</div><div class="sd">Prononciation et sens sous le dhikr</div></div><label class="sw"><input type="checkbox" id="oTr"><span></span></label></div>
     </div>
     <div class="card">
@@ -282,6 +284,7 @@
         <label for="calVal">Calibrage : nombre affiché sur la bague</label>
         <div class="row"><input id="calVal" type="number" inputmode="numeric" placeholder="ex. 27"><button class="btn gold" id="calBtn" style="flex:0 0 auto">Calibrer</button></div>
         <div class="small" id="calMsg"></div>
+        <div class="set"><div><div class="sl">Maintien de connexion (expérimental)</div><div class="sd">Interroge la bague toutes les 8 s. À désactiver si la bague se déconnecte plus souvent.</div></div><label class="sw"><input type="checkbox" id="oKeep"><span></span></label></div>
         <div class="row">
           <button class="btn" id="relearn">Réapprendre</button>
           <button class="btn" id="copy">Copier le journal</button>
@@ -309,6 +312,11 @@
   <div id="pickList"></div>
   <div class="row" style="margin-top:12px"><button class="btn" id="pickCancel">Annuler</button><button class="btn" id="pickAgain">Rechercher</button></div>
 </div></div>
+<div id="black" style="display:none;position:fixed;inset:0;background:#000;z-index:100;touch-action:manipulation;user-select:none">
+  <div id="bCount" style="position:absolute;left:0;right:0;top:42%;text-align:center;font-size:64px;font-weight:700;color:#1f2a25;font-variant-numeric:tabular-nums"></div>
+  <div id="bSub" style="position:absolute;left:0;right:0;top:calc(42% + 78px);text-align:center;font-size:14px;color:#18201c"></div>
+  <div id="bHint" style="position:absolute;left:0;right:0;bottom:12%;text-align:center;font-size:14px;color:#4a5a53;transition:opacity 1s">Touchez n'importe où pour compter<br>Appui long (1 s) pour quitter</div>
+</div>
 <div class="modal" id="swM"><div class="sheet">
   <div class="row" style="justify-content:space-between;margin-bottom:6px"><b style="font-size:16px">Choisir un zikr</b><button class="chip" id="swNew">+ Nouveau</button></div>
   <div id="swList"></div>
@@ -343,7 +351,7 @@
   });
 
   // ---------- Réglages ----------
-  const opt = Object.assign({theme:'emeraude', bg:'theme', dayGoal:0, lockDial:false, showTr:true, bgService:true, prayer:{on:false, city:'Niamey', lat:13.5116, lon:2.1254, method:'MuslimWorldLeague', off:5, which:['fajr','dhuhr','asr','maghrib','isha']}, lastBackup:null, vol:true, sound:false, vibC:false, vibL:true, autoSec:2, reminders:[]}, store.get('opt', {}));
+  const opt = Object.assign({theme:'emeraude', bg:'theme', dayGoal:0, lockDial:false, blackNum:true, keepAlive:false, showTr:true, bgService:true, prayer:{on:false, city:'Niamey', lat:13.5116, lon:2.1254, method:'MuslimWorldLeague', off:5, which:['fajr','dhuhr','asr','maghrib','isha']}, lastBackup:null, vol:true, sound:false, vibC:false, vibL:true, autoSec:2, reminders:[]}, store.get('opt', {}));
   const saveOpt = () => store.set('opt', opt);
   const THEMES = [['emeraude','#0f1513','#d4a84b'],['nuit','#0d1220','#6ea8ff'],['sable','#1c1610','#e0a35a'],['rose','#1a1015','#e58aa8'],['clair','#f4f1ea','#0f7a5a']];
   function applyBg(){
@@ -517,7 +525,7 @@
     document.querySelectorAll('#freeChips .chip').forEach(c => c.classList.toggle('sel', +c.dataset.v === (st.target||0)));
     if(st.free){
       $('zname').textContent=''; $('ztr').textContent='';
-      renderDayGoal(); bgNotify();
+      renderDayGoal(); bgNotify(); widgetPush(); blackRender();
       if(st.target>0){
         $('cur').textContent = st.cur; $('tgtLbl').textContent='/ '+st.target+' · compteur libre'; $('pct').textContent=Math.floor(st.cur/st.target*100)+' %';
         $('arc').setAttribute('stroke-dashoffset', C * (1 - st.cur/st.target));
@@ -537,7 +545,7 @@
     $('zname').textContent = st.name || '';
     $('ztr').textContent = opt.showTr ? trOf(st.name) : '';
     renderDayGoal();
-    bgNotify();
+    bgNotify(); widgetPush(); blackRender();
     $('cur').textContent = st.cur;
     $('tgtLbl').textContent = '/ ' + st.target;
     $('pct').textContent = Math.floor(st.cur / st.target * 100) + ' %';
@@ -795,6 +803,54 @@
     r.readAsText(f);
   };
 
+  // ================= Écran noir =================
+  // Écran entièrement noir (économise la batterie des écrans OLED, discret) : toucher n'importe où = +1,
+  // appui long = quitter. La bague et les boutons de volume continuent de compter.
+  let blackOn=false, bPress=null, bLong=false, bHintT=null;
+  function blackRender(){
+    if(!blackOn) return;
+    $('bCount').textContent = opt.blackNum ? (st.free && !(st.target>0) ? st.total : st.cur) : '';
+    $('bSub').textContent = opt.blackNum ? (st.free ? (st.target>0?'/ '+st.target:'') : '/ '+st.target+' · tour '+Math.min(st.rounds+1,st.goalRounds)+'/'+st.goalRounds) : '';
+  }
+  function blackOpen(){
+    blackOn=true; $('black').style.display='block'; $('bHint').style.opacity=1; blackRender();
+    clearTimeout(bHintT); bHintT=setTimeout(()=>$('bHint').style.opacity=0, 3500);
+    try{ document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(()=>{}); }catch(e){}
+    log('Écran noir activé');
+  }
+  function blackClose(){
+    blackOn=false; $('black').style.display='none';
+    try{ document.fullscreenElement && document.exitFullscreen(); }catch(e){}
+    render();
+  }
+  $('blackBtn').onclick = blackOpen;
+  const bEl=$('black');
+  bEl.addEventListener('pointerdown', e=>{ e.preventDefault(); bLong=false; clearTimeout(bPress); bPress=setTimeout(()=>{ bLong=true; vib(60); blackClose(); }, 1000); });
+  bEl.addEventListener('pointerup', e=>{ e.preventDefault(); clearTimeout(bPress); if(!bLong && blackOn){ if(opt.lockDial){ $('bHint').style.opacity=1; $('bHint').innerHTML='🔒 Cercle verrouillé : comptez avec la bague<br>Appui long (1 s) pour quitter'; clearTimeout(bHintT); bHintT=setTimeout(()=>$('bHint').style.opacity=0,2500); } else add(1); } });
+  bEl.addEventListener('pointercancel', ()=>clearTimeout(bPress));
+  bEl.addEventListener('contextmenu', e=>e.preventDefault());
+  $('oKeep').checked=opt.keepAlive; if(NAT) NAT.keepAlive=opt.keepAlive;
+  $('oKeep').onchange=e=>{ opt.keepAlive=e.target.checked; saveOpt(); if(NAT){ NAT.keepAlive=opt.keepAlive; if(!opt.keepAlive) NAT.stopKeepAlive&&NAT.stopKeepAlive(); } };
+  $('oBlackNum').checked=opt.blackNum; $('oBlackNum').onchange=e=>{ opt.blackNum=e.target.checked; saveOpt(); };
+
+  // ================= Widget d'écran d'accueil =================
+  let wT=null;
+  function widgetPush(){
+    if(!NAT || !NAT.widgetUpdate || wT) return;
+    wT=setTimeout(()=>{ wT=null;
+      const free=st.free, tgt = free ? (st.target>0?st.target:0) : st.target;
+      NAT.widgetUpdate({ title: free ? (tgt?'Compteur libre · '+tgt:'Compteur libre') : (st.name||'Zikr'), target: tgt, cur: free && !tgt ? st.total : st.cur, rounds: st.rounds||0, total: st.total });
+    }, 500);
+  }
+  async function widgetPull(){
+    if(!NAT || !NAT.widgetTake) return;
+    const n = await NAT.widgetTake();
+    if(n>0){ log('Widget : +'+n+' ajoutés à '+zName(st)); add(n); }
+    widgetPush();
+  }
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') widgetPull(); });
+  setTimeout(widgetPull, 600);
+
   renderLock();
   render();
 
@@ -979,17 +1035,17 @@
     if(!connected && busy) return;
     log('Bague déconnectée après '+Math.round((Date.now()-connAt)/1000)+' s');
     connected=false; if(!wantConn) return;
-    setStatus(false,'Reconnexion…'); log('Bague déconnectée — reconnexion automatique');
+    setStatus(false,'Reconnexion…'); log('Bague déconnectée — reconnexion automatique'); $('connect').textContent='Reconnexion… (toucher pour arrêter)';
     scheduleRetry(dev);
   }
   function scheduleRetry(dev){
     clearTimeout(retryT);
-    const wait=Math.min(10000, 1500*Math.pow(1.5,tries));
+    const wait=Math.min(4000, 800*Math.pow(1.4,tries));
     retryT=setTimeout(async()=>{
       if(!wantConn || connected || busy) return;
       busy=true;
-      try{ await NAT.reconnect(dev,onPacket,natDisc,log); connected=true; connAt=Date.now(); tries=0; setStatus(true,ringLabel(dev.deviceId,dev.name)); log('Reconnectée ✓'); }
-      catch(e){ tries++; log('Reconnexion échouée ('+tries+') : '+(e.message||e)); setStatus(false,'Reconnexion…'); busy=false; scheduleRetry(dev); return; }
+      try{ await NAT.reconnect(dev,onPacket,natDisc,log); connected=true; connAt=Date.now(); tries=0; setStatus(true,ringLabel(dev.deviceId,dev.name)); $('connect').textContent='Déconnecter la bague'; log('Reconnectée ✓'); }
+      catch(e){ tries++; log('Reconnexion échouée ('+tries+') : '+(e.message||e)); setStatus(false, tries>1 ? 'Appuyez sur la bague…' : 'Reconnexion…'); busy=false; scheduleRetry(dev); return; }
       busy=false;
     }, wait);
   }
@@ -1064,6 +1120,7 @@
   async function connect(){
     if(NAT){
       if(connected && natDev){ wantConn=false; clearTimeout(retryT); await NAT.disconnect(natDev); connected=false; bgStop(); setStatus(false,'Bague déconnectée'); $('connect').textContent='Connecter la bague'; renderRings(); return; }
+      if(wantConn && !connected && natDev){ wantConn=false; clearTimeout(retryT); try{ await NAT.stopScan(); }catch(e){} await NAT.disconnect(natDev); bgStop(); setStatus(false,'Bague déconnectée'); $('connect').textContent='Connecter la bague'; log('Reconnexion arrêtée'); return; }
       if(NAT.scan) { openPicker(); return; }
       try{ setStatus(false,'Recherche…'); busy=true; natDev = await NAT.connect(onPacket, natDisc, log); busy=false; afterConnect(natDev); }
       catch(e){ busy=false; log('Erreur : '+(e.message||e)); setStatus(false,'Échec connexion'); }
