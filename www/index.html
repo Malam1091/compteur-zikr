@@ -105,11 +105,9 @@
     <div class="card">
       <div id="catchup" style="display:none;background:var(--deep);border:1px solid var(--gold);border-radius:12px;padding:12px;margin-bottom:10px">
         <div id="cuText" style="font-size:14px;margin-bottom:8px"></div>
-        <label for="cuZikr">Ajouter à</label>
-        <select id="cuZikr"></select>
-        <div class="row" style="margin-top:10px">
+        <div class="row">
           <button class="btn" id="cuNo">Ignorer</button>
-          <button class="btn gold" id="cuYes">Ajouter</button>
+          <button class="btn gold" id="cuYes">⟳ Synchroniser</button>
         </div>
       </div>
       <div id="zname" dir="auto"></div>
@@ -164,6 +162,8 @@
     </div>
     <div class="card">
       <span class="ttl">Modifier le zikr sélectionné</span>
+      <div id="freeNote" class="small" style="display:none;margin-top:0">Le compteur libre n'a ni nom ni objectif. Pour un nom, un objectif et des tours, créez un zikr avec « + Nouveau » ou choisissez-en un dans la liste.</div>
+      <div id="editFields">
       <label for="zikr">Nom</label>
       <input id="zikr" dir="auto" placeholder="ex. سُبْحَانَ ٱللَّٰهِ">
       <div class="adh" id="adhE"></div>
@@ -172,6 +172,7 @@
       <div class="chips" id="chips"></div>
       <label for="goalRounds" style="margin-top:12px">Nombre de tours</label>
       <input id="goalRounds" type="number" min="1" inputmode="numeric" value="1">
+      </div>
     </div>
   </section>
 
@@ -405,15 +406,18 @@
   let db = store.get('db', null);
   if(!db || !Array.isArray(db.zikrs)){
     const old = store.get('state', null);
-    const z = mk(old&&old.name||'SubhanAllah', old&&old.target||33, old&&old.goalRounds||1);
-    if(old){ z.total=old.total||0; z.cur=old.cur||0; z.rounds=old.rounds||0; }
-    db = {zikrs:[z], activeId:z.id};
+    db = {zikrs:[], activeId:'free'};
+    if(old){ const z = mk(old.name||'Zikr', old.target||33, old.goalRounds||1); z.total=old.total||0; z.cur=old.cur||0; z.rounds=old.rounds||0; db.zikrs.push(z); }
   }
-  db.zikrs.forEach(z=>{ if(z.secs==null) z.secs=0; });
+  db.zikrs.forEach(z=>{ if(z.secs==null) z.secs=0; delete z.anchor; });
+  // Compteur libre : sans nom ni tour, toujours présent, actif à chaque ouverture
+  if(!db.zikrs.find(z=>z.free)) db.zikrs.unshift({id:'free', free:true, name:'', target:0, goalRounds:0, total:0, cur:0, rounds:0, secs:0});
+  db.activeId='free';
+  const zName = z => z.free ? 'Compteur libre' : (z.name||'Zikr');
   let hist = store.get('hist', {});            // { 'AAAA-MM-JJ': { nomZikr: n } }
   const dayKey = (d=new Date()) => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   function logHist(name, n){
-    const k=dayKey(); hist[k]=hist[k]||{}; const nm=name||'Zikr';
+    const k=dayKey(); hist[k]=hist[k]||{}; const nm=name||'Compteur libre';
     hist[k][nm]=Math.max(0,(hist[k][nm]||0)+n);
   }
   let st;
@@ -425,15 +429,21 @@
   function renderList(){
     const box=$('zlist'); box.innerHTML='';
     db.zikrs.forEach(z=>{
+      if(z.free){
+        const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
+        d.innerHTML='<button class="zt"><div class="zn">📿 Compteur libre</div><div class="zs">Sans nom ni objectif · total '+fmtN(z.total)+'</div></button>';
+        d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; pick(); render(); document.querySelector('nav button[data-v="count"]').click(); };
+        box.appendChild(d); return;
+      }
       const goal=z.target*z.goalRounds, p=Math.min(100,Math.floor(z.total/goal*100));
       const d=document.createElement('div'); d.className='zi'+(z.id===st.id?' act':'');
       d.innerHTML='<button class="zt"><div class="zn" dir="auto">'+(z.rounds>=z.goalRounds?'✓ ':'')+esc(z.name||'Zikr')+'</div><div class="zs">'+z.target+' × '+z.goalRounds+' tours · '+fmtN(z.total)+' / '+fmtN(goal)+' ('+p+' %)</div><div class="bar"><i style="width:'+p+'%"></i></div></button>'
         +'<button class="zd">'+(delArm===z.id?'Supprimer ?':'🗑')+'</button>';
-      d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; delArm=null; pick(); anchorNow(st); render(); document.querySelector('nav button[data-v="count"]').click(); };
+      d.querySelector('.zt').onclick=()=>{ db.activeId=z.id; delArm=null; pick(); render(); document.querySelector('nav button[data-v="count"]').click(); };
       d.querySelector('.zd').onclick=()=>{
         if(delArm!==z.id){ delArm=z.id; renderList(); setTimeout(()=>{ if(delArm===z.id){ delArm=null; renderList(); } },3000); return; }
         delArm=null; db.zikrs=db.zikrs.filter(x=>x.id!==z.id);
-        if(!db.zikrs.length) db.zikrs.push(mk('SubhanAllah',33,1));
+        if(db.activeId===z.id) db.activeId='free';
         pick(); render();
       };
       box.appendChild(d);
@@ -459,12 +469,12 @@
     ADHKAR.forEach(([t,n])=>{ const b=document.createElement('button'); b.className='chip ar'; b.textContent=t; b.onclick=()=>onPick(t,n); $(box).appendChild(b); });
   }
   fillAdh('adhN', (t,n)=>{ $('nName').value=t; $('nTarget').value=n; });
-  fillAdh('adhE', (t)=>{ st.name=t; render(); });
+  fillAdh('adhE', (t)=>{ if(st.free) return; st.name=t; render(); });
   $('newBtn').onclick=()=>{ const f=$('newForm'); f.style.display=f.style.display==='none'?'block':'none'; if(f.style.display==='block') $('nName').focus(); };
   $('nCancel').onclick=()=>{ $('newForm').style.display='none'; };
   $('nCreate').onclick=()=>{
     const z=mk($('nName').value.trim()||('Zikr '+(db.zikrs.length+1)), Math.max(1,parseInt($('nTarget').value)||33), Math.max(1,parseInt($('nRounds').value)||1));
-    db.zikrs.push(z); db.activeId=z.id; pick(); anchorNow(st);
+    db.zikrs.push(z); db.activeId=z.id; pick();
     $('nName').value=''; $('newForm').style.display='none'; render();
     document.querySelector('nav button[data-v="count"]').click();
   };
@@ -475,6 +485,21 @@
   let rafPending=false, saveT=null;
   function scheduleRender(){ if(rafPending) return; rafPending=true; requestAnimationFrame(()=>{ rafPending=false; render(true); }); }
   function render(light){
+    $('freeNote').style.display = st.free ? 'block' : 'none';
+    $('editFields').style.display = st.free ? 'none' : 'block';
+    if(st.free){
+      $('zname').textContent=''; $('ztr').textContent='';
+      renderDayGoal(); bgNotify();
+      $('cur').textContent = st.total; $('tgtLbl').textContent='Compteur libre'; $('pct').textContent='';
+      $('arc').setAttribute('stroke-dashoffset', C * (1 - (st.total%100)/100));
+      $('lapLbl').textContent='Sans objectif'; $('rounds').textContent='–'; $('left').textContent='–';
+      $('total').textContent=fmtN(st.total); $('done').style.display='none';
+      $('timer').textContent = (timerOn?'⏱ ':'⏸ ') + mmss(st.secs);
+      try{ showPending(); }catch(e){}
+      if(!light || $('v-list').classList.contains('show')) renderList();
+      if(light){ if(!saveT) saveT=setTimeout(()=>{ saveT=null; store.set('db',db); store.set('hist',hist); },800); } else store.set('db', db);
+      return;
+    }
     $('zname').textContent = st.name || '';
     $('ztr').textContent = opt.showTr ? trOf(st.name) : '';
     renderDayGoal();
@@ -497,8 +522,13 @@
     if(!light || $('v-list').classList.contains('show')) renderList();
     if(light){ if(!saveT) saveT=setTimeout(()=>{ saveT=null; store.set('db',db); store.set('hist',hist); },800); }
     else store.set('db', db);
+    try{ showPending(); }catch(e){}
   }
   function add(n){
+    if(st.free){
+      st.total+=n; st.cur=st.total; feedback('count');
+      logHist(zName(st), n); touchTimer(); scheduleRender(); return;
+    }
     for(let i=0;i<n;i++){
       st.total++; st.cur++;
       if(st.cur >= st.target){
@@ -507,25 +537,26 @@
         const d=$('dial'); d.classList.remove('flash'); void d.offsetWidth; d.classList.add('flash');
       } else feedback('count');
     }
-    logHist(st.name, n);
+    logHist(zName(st), n);
     touchTimer();
     scheduleRender();
   }
   function sub(){
     if(st.total<=0) return;
+    if(st.free){ st.total--; st.cur=st.total; logHist(zName(st),-1); scheduleRender(); return; }
     st.total--; st.cur--;
     if(st.cur < 0){ if(st.rounds>0){ st.rounds--; st.cur = st.target-1; } else st.cur = 0; }
-    logHist(st.name, -1);
+    logHist(zName(st), -1);
     scheduleRender();
   }
   [33,99,100,313,452,1000].forEach(v=>{
     const b=document.createElement('button'); b.className='chip'; b.dataset.v=v; b.textContent=v;
-    b.onclick=()=>{ st.target=v; if(st.cur>=v) st.cur=0; render(); };
+    b.onclick=()=>{ if(st.free) return; st.target=v; if(st.cur>=v) st.cur=0; render(); };
     $('chips').appendChild(b);
   });
-  $('target').onchange = e => { const v = Math.max(1, parseInt(e.target.value)||33); st.target=v; if(st.cur>=v) st.cur=0; render(); };
-  $('goalRounds').onchange = e => { st.goalRounds = Math.max(1, parseInt(e.target.value)||1); render(); };
-  $('zikr').oninput = e => { st.name = e.target.value; render(); };
+  $('target').onchange = e => { if(st.free) return; const v = Math.max(1, parseInt(e.target.value)||33); st.target=v; if(st.cur>=v) st.cur=0; render(); };
+  $('goalRounds').onchange = e => { if(st.free) return; st.goalRounds = Math.max(1, parseInt(e.target.value)||1); render(); };
+  $('zikr').oninput = e => { if(st.free) return; st.name = e.target.value; render(); };
   $('dial').onclick = () => { if(opt.lockDial){ const d=$('lock'); d.classList.remove('flash'); void d.offsetWidth; d.classList.add('flash'); return; } add(1); };
   function renderLock(){ $('lock').textContent = opt.lockDial ? '🔒' : '🔓'; $('lock').classList.toggle('on', opt.lockDial); $('oLock').checked=opt.lockDial; $('dial').style.opacity = opt.lockDial ? .85 : 1; }
   $('lock').onclick = () => { opt.lockDial=!opt.lockDial; saveOpt(); renderLock(); };
@@ -534,7 +565,7 @@
   let resetArm = 0;
   $('reset').onclick = () => {
     if(Date.now() - resetArm > 3000){ resetArm = Date.now(); $('reset').textContent='Confirmer ?'; setTimeout(()=>$('reset').textContent='↺ Zéro',3000); return; }
-    st.total=0; st.cur=0; st.rounds=0; st.secs=0; anchorNow(st); resetArm=0; timerOn=false; $('reset').textContent='↺ Zéro'; render();
+    st.total=0; st.cur=0; st.rounds=0; st.secs=0; resetArm=0; timerOn=false; $('reset').textContent='↺ Zéro'; render();
   };
 
   // ---------- Minuteur (se met en pause après 1 min sans compter) ----------
@@ -646,8 +677,8 @@
   // ================= Écran éteint : service + notification =================
   $('oBg').checked=opt.bgService; $('oBg').onchange=e=>{ opt.bgService=e.target.checked; saveOpt(); if(!opt.bgService) bgStop(); else if(typeof connected!=='undefined' && connected) bgStart(); };
   let bgT=null;
-  const bgTitle = () => (st.name||'Tasbih');
-  const bgBody = () => st.cur+' / '+st.target+' · tour '+Math.min(st.rounds+1,st.goalRounds)+'/'+st.goalRounds+' · total '+fmtN(st.total);
+  const bgTitle = () => st.free ? 'Tasbih — compteur libre' : (st.name||'Tasbih');
+  const bgBody = () => st.free ? 'Total '+fmtN(st.total) : st.cur+' / '+st.target+' · tour '+Math.min(st.rounds+1,st.goalRounds)+'/'+st.goalRounds+' · total '+fmtN(st.total);
   function bgStart(){ if(NAT && NAT.startBg && opt.bgService) NAT.startBg(bgTitle(), bgBody(), ()=>{ $('connect').click(); }); }
   function bgStop(){ if(NAT && NAT.stopBg) NAT.stopBg(); }
   function bgNotify(){ if(!NAT || !NAT.updateBg || bgT) return; bgT=setTimeout(()=>{ bgT=null; NAT.updateBg(bgTitle(), bgBody()); },700); }
@@ -747,11 +778,13 @@
   let ringSaveT = null;
   const saveRings = () => store.set('rings', rings);
   function saveRing(){ if(ringSaveT) return; ringSaveT=setTimeout(()=>{ ringSaveT=null;
-    if(curRing && rings[curRing]){ rings[curRing].last=lastRing; saveRings(); } else store.set('lastRing', lastRing); },1000); }
+    if(curRing && rings[curRing]){ rings[curRing].last=lastRing; rings[curRing].pending=pending; saveRings(); } else { store.set('lastRing', lastRing); store.set('pending', pending); } },1000); }
   const shortId = id => String(id).replace(/[^0-9A-Fa-f]/g,'').slice(-4).toUpperCase();
   const ringLabel = (id, name) => (rings[id] && rings[id].nick) || ((name||'Bague')+' · '+shortId(id));
   // Point de départ du zikr sur la bague : Synchroniser ne touche que ce zikr
-  function anchorNow(z){ if(lastRing!==null){ z.anchor={ring:lastRing,total:z.total,ringId:curRing}; store.set('db',db); } }
+  function anchorNow(){}   // (ancienne méthode, remplacée par les appuis en attente)
+  // Appuis faits sur la bague pendant que l'application ne les recevait pas : en attente de synchronisation
+  let pending = store.get('pending', 0);
   function showMap(){ if(mapping && mapping.fmt==='iqibla'){ $('map').innerHTML='Compteur de la bague : <b style="color:var(--ok)">protocole iQIBLA</b> ('+(mapping.field===1?'compteur affiché':'total cumulé')+')'; return; }
     $('map').innerHTML = 'Compteur de la bague : ' + (mapping ? '<b style="color:var(--ok)">détecté</b> ('+mapping.fmt+' à l\'octet '+mapping.off+')' : '<b>pas encore détecté</b> — appuyez plusieurs fois sur la bague'); }
   showMap();
@@ -771,51 +804,32 @@
     showRing(v);
     if(lastRing === null){
       lastRing = v; log('Valeur bague initiale : '+v);
-      // Les appuis faits pendant l'absence ne sont attribués à aucun zikr, sauf choix dans le bandeau
       if(savedRing!==null){
-        db.zikrs.forEach(z=>{ if(!z.anchor) return;
-          if((z.anchor.ringId||null)!==curRing) z.anchor={ring:v,total:z.total,ringId:curRing};
-          else if(v>=savedRing) z.anchor.ring += v-savedRing; else z.anchor={ring:v,total:z.total,ringId:curRing}; });
-        store.set('db',db);
+        const gap = v>=savedRing ? v-savedRing : v;   // si la bague a été remise à zéro, elle a compté v depuis
+        if(gap>0){ pending += gap; log('Appuis en attente : +'+gap+' (total '+pending+')'); }
       }
-      const rn = curRing ? '<b>'+esc(ringLabel(curRing))+'</b>' : 'La bague';
-      if(savedRing!==null && v>savedRing) askCatchup(v-savedRing, rn+' a compté <b>'+(v-savedRing)+'</b> de plus pendant votre absence.');
-      else if(savedRing!==null && v<savedRing && v>0) askCatchup(v, rn+' a été remise à zéro pendant votre absence. Elle a compté <b>'+v+'</b> depuis (les comptes d\'avant la remise à zéro ne peuvent pas être récupérés).');
-      if(!st.anchor || (st.anchor.ringId||null)!==curRing) anchorNow(st);
-      saveRing(); return;
+      saveRing(); showPending(); return;
     }
     if(v > lastRing && v - lastRing < 3000){ log('Bague '+lastRing+' → '+v+' (+'+(v-lastRing)+')'); add(v - lastRing); }
-    else if(v < lastRing){ log('La bague a été remise à zéro ('+lastRing+' → '+v+')'); db.zikrs.forEach(z=>{ if(z.anchor) z.anchor={ring:v,total:z.total}; }); }
+    else if(v < lastRing){ log('La bague a été remise à zéro ('+lastRing+' → '+v+')'); if(v>0 && v<3000) add(v); }
     lastRing = v; saveRing();
   }
-  // Rattrapage des comptes faits avec la bague pendant que l'application était fermée
-  let cuN=0;
-  function askCatchup(n, html){
-    cuN=n; $('cuText').innerHTML=html;
-    $('cuZikr').innerHTML=db.zikrs.map(z=>'<option value="'+z.id+'"'+(z.id===st.id?' selected':'')+'>'+esc(z.name||'Zikr')+'</option>').join('');
-    $('catchup').style.display='block'; log('Rattrapage proposé : '+n);
-    document.querySelector('nav button[data-v="count"]').click();
+  // Bandeau + bouton : ajoute les appuis en attente au zikr affiché
+  function showPending(){
+    $('syncBtn').textContent = pending>0 ? '⟳ Synchroniser (+'+pending+')' : '⟳ Synchroniser';
+    if(pending>0){
+      $('cuText').innerHTML='📿 La bague a <b>'+pending+'</b> appui'+(pending>1?'s':'')+' pas encore compté'+(pending>1?'s':'')+'. Ils seront ajoutés au zikr affiché <b>('+esc(zName(st))+')</b>. Pour un autre zikr, choisissez-le d\'abord dans « Mes zikr ».';
+      $('catchup').style.display='block';
+    } else $('catchup').style.display='none';
   }
-  $('cuNo').onclick=()=>{ $('catchup').style.display='none'; log('Rattrapage ignoré'); };
-  $('cuYes').onclick=()=>{
-    const z=db.zikrs.find(x=>x.id===$('cuZikr').value)||st;
-    const keep=st; st=z;            // compter sur le zikr choisi, avec vibrations de fin de tour
-    for(let i=0;i<cuN;i++){ z.total++; z.cur++; if(z.cur>=z.target){ z.cur=0; z.rounds++; } }
-    logHist(z.name, cuN); st=keep;
-    if(z.anchor) z.anchor.total+=cuN;
-    $('catchup').style.display='none'; log('Rattrapage : +'+cuN+' ajoutés à '+z.name); render();
-  };
-  // Synchroniser : remet le zikr EN COURS d'accord avec ce que la bague a compté depuis son point de départ
-  $('syncBtn').onclick = () => {
-    if(lastRing===null) return;
-    if(!st.anchor){ anchorNow(st); log('Point de départ enregistré pour '+st.name); return; }
-    const want = st.anchor.total + (lastRing - st.anchor.ring);
-    const diff = want - st.total;
-    if(want<0 || !diff){ log('Synchroniser : '+st.name+' déjà à jour'); return; }
-    st.total = want; st.rounds = Math.floor(want/st.target); st.cur = want % st.target;
-    logHist(st.name, diff);
-    log('Synchronisé '+st.name+' : '+(diff>0?'+':'')+diff); render();
-  };
+  function doSync(){
+    if(pending<=0){ log('Synchroniser : rien en attente'); $('syncBtn').textContent='✓ À jour'; setTimeout(showPending,1500); return; }
+    const n=pending; pending=0; add(n); saveRing(); showPending();
+    log('Synchronisé : +'+n+' ajoutés à '+zName(st));
+  }
+  $('syncBtn').onclick = doSync;
+  $('cuYes').onclick = doSync;
+  $('cuNo').onclick = () => { log('Appuis en attente ignorés : '+pending); pending=0; saveRing(); showPending(); };
   // Calibrage : cherche le nombre affiché sur la bague dans les derniers messages reçus
   const lastPk = {};
   $('calBtn').onclick = () => {
@@ -947,6 +961,7 @@
     rings[curRing]=rings[curRing]||{name:dev.name||'Bague'};
     if(rings[curRing].last==null && savedRing!==null && Object.keys(rings).length===1){ rings[curRing].last=savedRing; store.set('lastRing',null); }
     savedRing = rings[curRing].last!=null ? rings[curRing].last : null;
+    pending = rings[curRing].pending || 0; showPending();
     saveRings(); renderRings();
   }
   // ----- Sélecteur de bague -----
