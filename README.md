@@ -14,8 +14,8 @@ L'APK apparaît dans l'onglet **Releases** du dépôt (fichier `Tasbih.apk`).
 - `.github/workflows/build-apk.yml` — compilation automatique
 
 ## Auteur et licence
-© 2026 **Malam** (Malam1091) — Tous droits réservés.
+© 2026 **Garba Inoussa Ismael** — Tous droits réservés.
 Application gratuite, libre d'utilisation pour tous. Reproduction, modification ou vente
 interdites sans autorisation. Voir le fichier [LICENSE](LICENSE).
 
-L'APK est signé avec le certificat de l'auteur : `CN=Malam, O=Malam1091, L=Niamey, C=NE`.
+L'APK est signé avec le certificat de l'auteur (RSA 3072 bits).

@@ -18,7 +18,7 @@ android {
     }
     signingConfigs {
         debug {
-            // Certificat de signature de Malam (propriétaire de l'application Tasbih)
+            // Certificat de signature de l'auteur, Garba Inoussa Ismael (propriétaire de l'application Tasbih)
             storeFile file("tasbih-malam.keystore")
             storePassword "Malam1091Tasbih"
             keyAlias "malam"
