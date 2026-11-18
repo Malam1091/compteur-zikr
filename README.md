@@ -3,9 +3,12 @@
 Application Android pour la bague Zikr Ring (iQIBLA) :
 objectif par tour, nombre de tours, retour automatique à zéro, vibration à chaque tour.
 
-## Obtenir l'APK
-GitHub compile l'application automatiquement à chaque envoi de fichiers.
-L'APK apparaît dans l'onglet **Releases** du dépôt (fichier `Tasbih.apk`).
+## Installer
+Lien permanent vers la **dernière version** (à ouvrir sur le téléphone Android) :
+https://github.com/Malam1091/compteur-zikr/releases/latest/download/Tasbih.apk
+
+Sur un nouveau téléphone, installez directement ce fichier : aucune version précédente n'est nécessaire.
+GitHub compile l'application automatiquement à chaque modification.
 
 ## Structure
 - `www/index.html` — l'interface et la logique du compteur
