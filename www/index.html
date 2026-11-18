@@ -310,6 +310,7 @@
   <div class="row" style="justify-content:space-between;margin-bottom:8px"><b style="font-size:16px">Choisir une bague</b><span class="sig" id="pickState">Recherche…</span></div>
   <div class="small" style="margin-top:0">Appuyez sur le bouton de la bague pour la réveiller si elle n'apparaît pas.</div>
   <div id="pickList"></div>
+  <label class="small" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="pickAll" style="width:auto"> Voir tous les appareils Bluetooth (si votre bague n'apparaît pas)</label>
   <div class="row" style="margin-top:12px"><button class="btn" id="pickCancel">Annuler</button><button class="btn" id="pickAgain">Rechercher</button></div>
 </div></div>
 <div id="black" style="display:none;position:fixed;inset:0;background:#000;z-index:100;touch-action:manipulation;user-select:none">
@@ -900,6 +901,7 @@
     u32le:(b,o)=> o+3<b.length ? (b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0 : null,
     u32be:(b,o)=> o+3<b.length ? ((b[o]<<24)|(b[o+1]<<16)|(b[o+2]<<8)|b[o+3])>>>0 : null
   };
+  const textNums = b => (String.fromCharCode(...b).match(/\d+/g)||[]).map(x=>parseInt(x,10));
   function asciiNum(b){ const s=String.fromCharCode(...b); const m=s.match(/(\d{1,5})/); return m?parseInt(m[1]):null; }
 
   function showRing(v){ $('ringRow').style.display='flex'; $('ringVal').textContent=v; }
@@ -947,6 +949,7 @@
     }
     const order=['u16le','u16be','u8','u32le','u32be']; const found=[];
     for(const k in lastPk){ const b=lastPk[k];
+      if(isText(b)){ textNums(b).forEach((n,i)=>{ if(n===want) found.push({key:k,off:i,fmt:'txt',len:b.length,head:b[0]}); }); continue; }
       for(const f of order) for(let o=0;o<b.length;o++){ if(FMTS[f](b,o)===want) found.push({key:k,off:o,fmt:f,len:b.length,head:b[0]}); }
       if(asciiNum(b)===want) found.push({key:k,off:0,fmt:'ascii',len:b.length,head:b[0]});
     }
@@ -964,8 +967,9 @@
   let qbuf='', lastQ=null;
   const isText = b => b.length>0 && Array.from(b).every(x=>x>=0x20 && x<0x7f);
   function onIqibla(txt){
-    if(/^[A-Z]\d/.test(txt)) qbuf=txt; else qbuf+=txt;
-    if(qbuf[0]!=='Q') return true;
+    if(/^[A-Z]\d/.test(txt)) qbuf=txt; else if(qbuf) qbuf+=txt; else return false;
+    if(qbuf[0]==='R') return true;                 // message périodique de la bague
+    if(qbuf[0]!=='Q'){ qbuf=''; return false; }    // autre format : détection automatique
     const parts=qbuf.split(',');
     lastQ=parts;
     if(!mapping || mapping.fmt!=='iqibla'){ mapping={fmt:'iqibla', field:1}; store.set('mapping',mapping); showMap(); log('✓ Protocole iQIBLA reconnu'); }
@@ -983,20 +987,21 @@
       if(txt!=='R01') log(key.slice(4,8)+' ← '+txt);
       if(onIqibla(txt)) return;
     }
-    log(key.slice(4,8)+' ← '+hex(b));
-    if(mapping){
-      if(mapping.key===key && b.length===mapping.len && b[0]===mapping.head){
-        const v = mapping.fmt==='ascii' ? asciiNum(b) : FMTS[mapping.fmt](b, mapping.off);
-        if(v!==null) onRingValue(v);
+    if(!isText(b)) log(key.slice(4,8)+' ← '+hex(b));
+    if(mapping && mapping.fmt!=='iqibla'){
+      const sameType = mapping.key===key && b[0]===mapping.head && (mapping.fmt==='txt' || b.length===mapping.len);
+      if(sameType){
+        const v = mapping.fmt==='txt' ? textNums(b)[mapping.off] : mapping.fmt==='ascii' ? asciiNum(b) : FMTS[mapping.fmt](b, mapping.off);
+        if(v!=null && !isNaN(v)) onRingValue(v);
       }
       return;
     }
-    const pk = key+'|'+b.length+'|'+b[0];          // messages du même type uniquement
+    const pk = key+'|'+(isText(b)?'t':b.length)+'|'+b[0];          // messages du même type uniquement
     const p = prev[pk];
     if(p){
       const cands=[];
-      for(const f in FMTS) for(let o=0;o<b.length;o++){ const a=FMTS[f](p,o), c=FMTS[f](b,o); if(a!==null && c!==null) cands.push([f,o,a,c]); }
-      const aa=asciiNum(p), ab=asciiNum(b); if(aa!==null && ab!==null) cands.push(['ascii',0,aa,ab]);
+      if(isText(b) && isText(p)){ const na=textNums(p), nb=textNums(b); for(let o=0;o<Math.min(na.length,nb.length);o++) cands.push(['txt',o,na[o],nb[o]]); }
+      else for(const f in FMTS) for(let o=0;o<b.length;o++){ const a=FMTS[f](p,o), c=FMTS[f](b,o); if(a!==null && c!==null) cands.push([f,o,a,c]); }
       for(const [f,o,a,c] of cands){
         const id=key+'|'+f+'|'+o+'|'+b.length+'|'+b[0];
         if(c===a+1) scores[id]=(scores[id]||0)+1; else if(c!==a) scores[id]=0;
@@ -1004,13 +1009,13 @@
       const best = Object.entries(scores).filter(([,s])=>s>=3);
       if(best.length){
         const top=Math.max(...best.map(x=>x[1]));
-        const order=['u16le','u16be','u8','u32le','u32be','ascii'];
+        const order=['txt','u16le','u8','u16be','u32le','u32be','ascii'];
         // La bague compte jusqu'à 9999 et son compteur ne repart pas à 0 à chaque connexion,
         // contrairement à un numéro de message : on préfère la plus grande valeur plausible.
-        const ties=best.filter(x=>x[1]===top).map(([id])=>{ const [k,f,o,len,head]=id.split('|'); return {k,f,o:+o,len:+len,head:+head,v:(f==='ascii'?asciiNum(b):FMTS[f](b,+o))}; })
+        const ties=best.filter(x=>x[1]===top).map(([id])=>{ const [k,f,o,len,head]=id.split('|'); return {k,f,o:+o,len:+len,head:+head,v:(f==='txt'?textNums(b)[+o]:f==='ascii'?asciiNum(b):FMTS[f](b,+o))}; })
           .filter(t=>t.k===key && t.len===b.length && t.head===b[0] && t.v!==null && t.v<=9999);
         if(ties.length){
-          ties.sort((x,y)=> (y.v-x.v) || (order.indexOf(x.f)-order.indexOf(y.f)));
+          ties.sort((x,y)=> (order.indexOf(x.f)-order.indexOf(y.f)) || (y.v-x.v));
           const t=ties[0];
           mapping={key:t.k, off:t.o, fmt:t.f, len:t.len, head:t.head};
           store.set('mapping',mapping); showMap(); log('✓ Compteur détecté : '+t.f+' octet '+t.o+' (valeur '+t.v+', '+ties.length+' candidat(s))');
@@ -1068,7 +1073,7 @@
     saveRings(); renderRings();
   }
   // ----- Sélecteur de bague -----
-  let found={};
+  let found={}, showAllDev=false;
   function drawPick(){
     const ids=Object.keys(found).sort((a,b)=>(!!rings[b])-(!!rings[a]) || found[b].rssi-found[a].rssi);
     $('pickList').innerHTML = ids.length ? '' : '<div class="empty">Aucune bague trouvée pour l\'instant…</div>';
@@ -1083,10 +1088,11 @@
   }
   async function openPicker(){
     found={}; drawPick(); $('pickM').classList.add('show'); $('pickState').textContent='Recherche…';
-    try{ await NAT.scan(r=>{ if(!r.name && !rings[r.id]) return; if(!/zikr|ring|qibla|tasb/i.test(r.name||'') && !rings[r.id]) return; found[r.id]=r; drawPick(); }, 10000);
+    try{ await NAT.scan(r=>{ if(!r.name && !rings[r.id] && !showAllDev) return; if(!showAllDev && !/zikr|ring|qibla|tasb|noor|jood|flex|umeox|misbaha|tasbih/i.test(r.name||'') && !rings[r.id]) return; found[r.id]=r; drawPick(); }, 10000);
       setTimeout(()=>$('pickState').textContent='', 10000); }
     catch(e){ $('pickState').textContent='Erreur'; log('Recherche impossible : '+(e.message||e)); }
   }
+  $('pickAll').onchange=e=>{ showAllDev=e.target.checked; NAT && NAT.stopScan(); openPicker(); };
   $('pickCancel').onclick=()=>{ NAT && NAT.stopScan(); $('pickM').classList.remove('show'); };
   $('pickAgain').onclick=()=>{ NAT && NAT.stopScan(); openPicker(); };
   async function pickRing(id,name){
