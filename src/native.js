@@ -117,6 +117,21 @@ window.ZikrNative = {
     this._scanT = setTimeout(() => this.stopScan(), ms || 8000);
   },
   async stopScan() { clearTimeout(this._scanT); try { await BleClient.stopLEScan(); } catch (e) {} },
+  // ---- Retrouver ma bague : force du signal en continu ----
+  // Bague connectée : lecture du signal de la liaison. Sinon : recherche continue de ses annonces.
+  async track(id, name, connected, cb) {
+    await this.untrack();
+    if (connected) {
+      this._trk = setInterval(async () => { try { cb(await BleClient.readRssi(id)); } catch (e) {} }, 800);
+      return;
+    }
+    await BleClient.initialize({ androidNeverForLocation: false });
+    try { await BleClient.stopLEScan(); } catch (e) {}
+    await BleClient.requestLEScan(name ? { name, allowDuplicates: true } : { allowDuplicates: true }, r => {
+      if (r.device && r.device.deviceId === id) cb(r.rssi);
+    });
+  },
+  async untrack() { if (this._trk) { clearInterval(this._trk); this._trk = null; } try { await BleClient.stopLEScan(); } catch (e) {} },
   // Ferme une ancienne liaison restée ouverte (évite l'erreur Android 133 à la reconnexion)
   async cleanup(id) { this.stopKeepAlive(); try { await BleClient.disconnect(id); } catch (e) {} },
   // Attend que la bague soit visible (elle se réveille quand on appuie dessus)

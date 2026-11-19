@@ -267,6 +267,7 @@
     </div>
     <div class="card">
       <span class="ttl">Mes bagues</span>
+      <button class="btn gold" id="findBtn" style="width:100%;margin-bottom:8px">📍 Retrouver ma bague</button>
       <div id="ringList"></div>
     </div>
     <div class="card" style="text-align:center">
@@ -322,6 +323,21 @@
   <div class="row" style="justify-content:space-between;margin-bottom:6px"><b style="font-size:16px">Choisir un zikr</b><button class="chip" id="swNew">+ Nouveau</button></div>
   <div id="swList"></div>
   <button class="btn" id="swClose" style="width:100%;margin-top:12px">Fermer</button>
+</div></div>
+<div class="modal" id="findM"><div class="sheet" style="text-align:center">
+  <b style="font-size:16px;display:block">Retrouver ma bague</b>
+  <div class="small" id="fName" style="margin-top:2px"></div>
+  <select id="fSel" style="margin:10px 0;display:none"></select>
+  <svg viewBox="0 0 200 200" width="190" height="190" style="display:block;margin:8px auto">
+    <circle cx="100" cy="100" r="88" fill="none" stroke="var(--line)" stroke-width="14"/>
+    <circle id="fArc" cx="100" cy="100" r="88" fill="none" stroke="var(--gold)" stroke-width="14" stroke-linecap="round" transform="rotate(-90 100 100)" stroke-dasharray="552.9" stroke-dashoffset="552.9" style="transition:stroke-dashoffset .5s"/>
+    <text id="fPct" x="100" y="96" text-anchor="middle" font-size="40" font-weight="700" fill="var(--txt)">–</text>
+    <text id="fDbm" x="100" y="124" text-anchor="middle" font-size="12" fill="var(--mut)"></text>
+  </svg>
+  <div id="fTxt" style="font-size:20px;font-weight:700;color:var(--gold2)">Recherche…</div>
+  <div class="small" id="fHint">Déplacez-vous lentement : le cercle se remplit quand vous vous rapprochez. Appuyez sur la bague si elle reste introuvable (elle se réveille).</div>
+  <label class="small" style="display:flex;gap:8px;align-items:center;justify-content:center;margin:6px 0"><input type="checkbox" id="fBeep" style="width:auto" checked> Bip qui s'accélère en se rapprochant</label>
+  <button class="btn" id="fClose" style="width:100%;margin-top:6px">Fermer</button>
 </div></div>
 <div class="modal" id="nameM"><div class="sheet">
   <b style="font-size:16px;display:block;margin-bottom:6px">Nom de la bague</b>
@@ -851,6 +867,43 @@
   }
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') widgetPull(); });
   setTimeout(widgetPull, 600);
+
+  // ================= Retrouver ma bague (force du signal) =================
+  let fId=null, fLast=0, fRssi=null, fBeepT=null, fSmooth=null;
+  function fShow(){
+    const age=Date.now()-fLast;
+    if(fRssi===null || age>6000){ $('fTxt').textContent = fRssi===null ? 'Recherche…' : 'Signal perdu…'; $('fPct').textContent='–'; $('fDbm').textContent=''; $('fArc').setAttribute('stroke-dashoffset',552.9); return; }
+    const p=Math.max(0,Math.min(100,Math.round((fSmooth+100)/60*100)));   // -100 dBm = 0 %, -40 dBm = 100 %
+    $('fPct').textContent=p+'%'; $('fDbm').textContent=Math.round(fSmooth)+' dBm';
+    $('fArc').setAttribute('stroke-dashoffset',552.9*(1-p/100));
+    $('fTxt').textContent = fSmooth>-55 ? '🔥 Tout près !' : fSmooth>-67 ? 'Très proche' : fSmooth>-78 ? 'Proche' : fSmooth>-88 ? 'Plus loin…' : 'Loin';
+  }
+  function fBeepLoop(){
+    clearTimeout(fBeepT); if(!$('findM').classList.contains('show')) return;
+    let wait=1500;
+    if(fRssi!==null && Date.now()-fLast<6000){ const p=Math.max(0,Math.min(1,(fSmooth+100)/60)); wait=1400-p*1250; if($('fBeep').checked) beep(600+p*700,0.07); }
+    fBeepT=setTimeout(fBeepLoop, wait);
+  }
+  async function fStart(id){
+    fId=id; fRssi=null; fSmooth=null; fShow();
+    const r=rings[id]||{}; $('fName').textContent=ringLabel(id,r.name)+(connected&&curRing===id?' · connectée':'');
+    try{ await NAT.track(id, r.name||'', connected && curRing===id, v=>{ fRssi=v; fLast=Date.now(); fSmooth = fSmooth===null ? v : fSmooth*0.6+v*0.4; fShow(); }); }
+    catch(e){ $('fTxt').textContent='Recherche impossible'; log('Retrouver : '+(e.message||e)); }
+  }
+  $('findBtn').onclick=()=>{
+    const ids=Object.keys(rings);
+    if(!NAT || !NAT.track){ $('fTxt').textContent="Fonction disponible dans l'application Android."; $('findM').classList.add('show'); return; }
+    if(!ids.length){ $('fTxt').textContent="Connectez d'abord la bague une fois pour l'enregistrer."; $('fName').textContent=''; $('findM').classList.add('show'); return; }
+    $('fSel').style.display = ids.length>1 ? 'block' : 'none';
+    $('fSel').innerHTML = ids.map(id=>'<option value="'+id+'">'+esc(ringLabel(id,rings[id].name))+'</option>').join('');
+    const start = curRing && rings[curRing] ? curRing : ids[0]; $('fSel').value=start;
+    $('findM').classList.add('show'); fStart(start); fBeepLoop();
+    log('Retrouver ma bague : '+ringLabel(start));
+  };
+  $('fSel').onchange=e=>fStart(e.target.value);
+  const fStop=()=>{ $('findM').classList.remove('show'); clearTimeout(fBeepT); NAT && NAT.untrack && NAT.untrack(); };
+  $('fClose').onclick=fStop;
+  setInterval(()=>{ if($('findM').classList.contains('show')) fShow(); }, 1000);
 
   renderLock();
   render();
